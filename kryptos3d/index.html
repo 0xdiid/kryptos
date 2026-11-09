@@ -380,7 +380,7 @@ function facade(style) {
     const cw = w / 8, ch = h / 8, night = mode === 'em', rm = mode === 'rm';
     const CONC = rm ? '#00d800' : night ? '#000' : '#dcd8ce', FRAME = rm ? '#008030' : night ? '#000' : '#eef0ea', GLASS_RM = '#002c70';
     for (let by = 0; by < 8; by++) for (let bx = 0; bx < 8; bx++) {
-      const x = bx * cw, y = by * ch, on = lit[by * 8 + bx] ??= R() < 0.35;
+      const x = bx * cw, y = by * ch, on = style === 'glass' || (lit[by * 8 + bx] ??= R() < 0.35); // the glazed halls are lit throughout
       const pane = (px, py, pw, ph, c0, c1) => {
         if (rm) g.fillStyle = GLASS_RM; else if (night) g.fillStyle = on ? '#ffdfae' : '#000';
         else { const gr = g.createLinearGradient(px, py, px + pw * 0.4, py + ph); gr.addColorStop(0, c0); gr.addColorStop(1, c1); g.fillStyle = gr; }
@@ -568,7 +568,7 @@ function styleOf(f) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
   add(new THREE.Mesh(g, std({ color: 0xf0f0ec, roughness: 0.6, side: THREE.DoubleSide })));
   const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wpos, 3)); wg.setAttribute('uv', new THREE.Float32BufferAttribute(wuv, 2)); wg.setIndex(widx); wg.computeVertexNormals();
-  const wm = facadeMats.glass.clone(); wm.side = THREE.DoubleSide; add(new THREE.Mesh(wg, wm));
+  const wm = facadeMats.cafeGlass = facadeMats.glass.clone(); wm.side = THREE.DoubleSide; add(new THREE.Mesh(wg, wm));
 }
 
 { // Stepped wing: between its concrete bays, sloped glass roofs run down from each tier to the next (CIA rooftop photograph)
@@ -580,7 +580,7 @@ function styleOf(f) {
     idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3);
   }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
-  const m = facadeMats.glass.clone(); m.side = THREE.DoubleSide; m.color.set(0xa8e0d2); add(new THREE.Mesh(g, m));
+  const m = facadeMats.wingGlass = facadeMats.glass.clone(); m.side = THREE.DoubleSide; m.color.set(0xa8e0d2); add(new THREE.Mesh(g, m));
 }
 
 { // NHB entrance (CIA photographs): a glass barrel vault over the entrance hall ending in a white arch portal on concrete
@@ -599,7 +599,7 @@ function styleOf(f) {
     const j = add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.035, 3.02), joint), { parent: hall, cast: false });
     j.position.set(Math.cos(a) * (R0 + 0.75), Math.sin(a) * (R0 + 0.75), 1.71); j.rotation.z = a;
   }
-  const endGlass = facadeMats.glass.clone(); endGlass.side = THREE.DoubleSide;
+  const endGlass = facadeMats.entranceGlass = facadeMats.glass.clone(); endGlass.side = THREE.DoubleSide;
   { // glazed end wall: mullion grid in the arch, a row of doors below (CIA photograph)
     const fan = new THREE.CircleGeometry(R0, 28, 0, Math.PI), uvA = fan.attributes.uv, pA = fan.attributes.position;
     for (let i = 0; i < uvA.count; i++) uvA.setXY(i, pA.getX(i) + R0, pA.getY(i) + SP);
