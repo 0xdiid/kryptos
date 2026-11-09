@@ -57,7 +57,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   #sun { width: 230px; }
 }
 </style>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Domine:wght@700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
 
 <canvas id="gl"></canvas>
 <div id="loading">Cutting copper…</div>
@@ -112,7 +112,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     <div><kbd>W A S D</kbd> walk &nbsp; <kbd>Shift</kbd> jog &nbsp; mouse to look &nbsp; <kbd>Q E</kbd> turn<br><kbd>Scroll</kbd> zoom to read letters &nbsp; <kbd>T</kbd> play/pause time &nbsp; <kbd>Esc</kbd> release mouse</div>
     <div class="fine">On touch screens: drag on the left half to walk, the right half to look.</div>
     <button class="go" id="go">Enter the courtyard</button>
-    <div class="fine">Site plan, buildings and trees: © OpenStreetMap contributors (ODbL). Terrain: AWS Terrain Tiles (USGS 3DEP). Cipher layout: CIA and Wikipedia transcriptions. Element sizes: Sanborn's descriptions via Elonka Dunin.</div>
+    <div class="fine">Site plan, buildings and trees: © OpenStreetMap contributors (ODbL). Terrain: AWS Terrain Tiles (USGS 3DEP). Cipher layout: CIA and Wikipedia transcriptions. Placement and shapes fitted to aerial imagery and to photographs by Jim Gillogly, Carol Highsmith and the GSA; sizes from Sanborn's descriptions via Elonka Dunin.</div>
   </div>
 </div>
 
@@ -135,27 +135,40 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 const LAT = 38.952256, LON = -77.1457484;
 const M_PER_DEG = 111320, M_PER_DEG_LON = M_PER_DEG * Math.cos(LAT * Math.PI / 180);
 const geoToXZ = (lat, lon) => [(lon - LON) * M_PER_DEG_LON, -(lat - LAT) * M_PER_DEG];
+const KX = 0.35, KZ = -1.3, PAVE_Y = 0.092; // pool centre (see the screen section) and height of the terrace paving
 const K2_LAT = 38 + 57 / 60 + 6.5 / 3600, K2_LON = -(77 + 8 / 60 + 44 / 3600);
 const MAG_DECL = -10.6; // degrees; magnetic north lies west of true north at Langley
 
 const { cipher: CIPHER_ROWS, tableau: TABLEAU_ROWS } = JSON.parse(document.getElementById('rows').textContent);
 const SITE = JSON.parse(document.getElementById('site').textContent);
 // NHB sections missing from OpenStreetMap, traced from aerial imagery: the low block between the towers (split by the
-// glass entrance hall) and the wing that steps down to the courtyard in three tiers. `top` is metres above the courtyard.
-for (const [o, top] of [
-  [[[-86, 6], [-33, -6], [-31, 31], [-69, 42], [-86, 46]], 22],
-  [[[-78, 57], [-29, 44], [-28, 60], [-74, 66]], 22],
-  [[[-33, -6], [-26, -7], [-22, 47], [-30, 48]], 16],
-  [[[-26, -7], [-19, -8], [-15, 46], [-22, 47]], 11],
-  [[[-19, -8], [-13, -9], [-8, 45], [-15, 46]], 6],
-]) SITE.push({ k: 'b', o, top, ht: top, bc: '#5D857A' });
+// glass entrance hall), the wing that steps down to the courtyard in three tiers, and the covered link from the north
+// tower to the cafeteria. The courtyard face of the wing follows the west edge of OSM polygon PLANTER below. `top` is
+// metres above the courtyard.
+for (const [o, top, glass] of [
+  [[[-69.6, 10.3], [-28.5, -0.8], [-19.5, 31], [-66, 43.5]], 22],
+  [[[-64, 54], [-16.5, 41.5], [-7.7, 73.5], [-48.6, 84.9]], 22],
+  [[[-19.5, 31], [-16.5, 41.5], [-64, 54], [-66, 43.5]], 6.5, 1], // entrance hall walls; its glass barrel vault is built below
+  [[[-28.5, -0.8], [-23.9, -2.0], [-3.1, 72.2], [-7.7, 73.5]], 16],
+  [[[-23.9, -2.0], [-19.3, -3.3], [1.5, 70.9], [-3.1, 72.2]], 11],
+  [[[-19.3, -3.3], [-14.7, -4.5], [6.1, 69.6], [1.5, 70.9]], 6],
+  [[[2.3, -17.6], [3.5, -13.3], [23, -17.9], [22.1, -20.8]], 4.2],
+]) SITE.push({ k: 'b', o, top, ht: top, bc: '#5D857A', material: glass ? 'glass' : undefined });
+for (const f of SITE) if (f.k === 'b' && f.ht === 8 && f.o.some(([x, z]) => Math.abs(x - 28.8) < 0.2 && Math.abs(z - 0.8) < 0.2 || Math.abs(x - 43.6) < 0.2 && Math.abs(z - 55.4) < 0.2)) f.top = 4.4; // cafeteria: walls to the springing of its vaults
+for (const f of SITE) if (f.k === 'tree' && (Math.hypot(f.p[0] - 12.5, f.p[1] - 3.8) < 1 || Math.hypot(f.p[0] - 11.5, f.p[1] - 29.8) < 1)) { f.ht = 19; f.cr = 6.5; f.keep = true; } // the two big lawn trees
+// OSM maps the long raised planting bed between that wing and the paved terrace as grass; its east edge is the low
+// concrete wall behind the sculpture.
+const PLANTER = SITE.find(f => f.k === 'grass' && f.o.some(([x, z]) => Math.abs(x + 8.6) < 0.2 && Math.abs(z - 3.4) < 0.2));
+PLANTER.k = 'planter';
+const LAWN_POLY = SITE.find(f => f.k === 'grass' && f.o.some(([x, z]) => Math.abs(x - 3.9) < 0.2 && Math.abs(z - 13.3) < 0.2)).o;
+for (const f of SITE) if (f.k === 'tree' && Math.hypot(f.p[0] - 19.9, f.p[1] - 6) < 1) f.lt = 'n'; // the blue spruce on the lawn
 // Bare-earth terrain (AWS Terrain Tiles / USGS 3DEP), 4 m grid, decimetres relative to the sculpture's base.
 const DEM = JSON.parse(document.getElementById('dem').textContent);
 const DEM_H = new Int16Array(Uint8Array.from(atob(DEM.d), c => c.charCodeAt(0)).buffer);
 const DEM_HALF = (DEM.n - 1) * DEM.s / 2;
 // The 4 m DEM smooths the courtyard's building walls into slopes. The NHB courtyard (plaza and lawn) is level, so the
 // terrain is flattened inside it (outline traced along the surrounding OSM building faces) and blended back over 8 m.
-const COURTYARD = [[-22, -24], [26, -20], [46, 58], [24, 66], [-6, 64], [-14, 40], [-24, 8]];
+const COURTYARD = [[-14.7, -4.5], [4.5, -9.7], [3.5, -13.3], [23, -17.9], [28.8, 0.8], [43.6, 55.4], [46, 62], [24.1, 64.6], [6.1, 69.6]];
 function H(x, z) {
   let d = 0;
   if (!inPoly(x, z, COURTYARD)) {
@@ -203,6 +216,8 @@ function nyOffsetMin(ms) { const o = nyParts(ms); return (Date.UTC(+o.year, +o.m
 function localToUTC(y, m, d, mins) { const guess = Date.UTC(y, m - 1, d, 0, mins); return guess - nyOffsetMin(guess + 5 * 3600000) * 60000; }
 
 // ---------- Renderer / scene ----------
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const coarse = matchMedia('(pointer: coarse)').matches;
 const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -262,47 +277,18 @@ function blotches(g, w, h, n, colors, rMin, rMax, aMax) {
   g.globalAlpha = 1;
 }
 function copperBase(g, w, h, scale = 1) {
-  g.fillStyle = '#4f8072'; g.fillRect(0, 0, w, h);
-  blotches(g, w, h, 260 * scale, ['#3a6458', '#64907f', '#82ac9a', '#3e584c', '#5a7e6c', '#6a6a50'], 40 * scale, 260 * scale, 0.45);
-  for (let i = 0; i < 700 * scale; i++) { // verdigris run-off streaks
-    const x = R() * w, y = R() * h * 0.6, len = 60 + R() * h * 0.5, wd = 1 + R() * 5 * scale;
-    const gr = g.createLinearGradient(0, y, 0, y + len);
-    gr.addColorStop(0, R() < 0.6 ? 'rgba(140,190,170,0.3)' : 'rgba(20,32,28,0.35)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = '#2f6a63'; g.fillRect(0, 0, w, h);
+  blotches(g, w, h, 320 * scale, ['#1d4a48', '#3d8377', '#5a9f8e', '#224a44', '#2a6468', '#47806c', '#1a3c3c'], 40 * scale, 280 * scale, 0.5);
+  for (let i = 0; i < 60 * scale; i++) { // verdigris run-off: broad, faint, feathered
+    const x = R() * w, y = R() * h * 0.9, len = (120 + R() * 500) * scale, wd = (8 + R() * 50) * scale;
+    const gr = g.createLinearGradient(x, 0, x + wd, 0), c = R() < 0.55 ? '120,190,170' : '12,30,30';
+    gr.addColorStop(0, `rgba(${c},0)`); gr.addColorStop(0.5, `rgba(${c},${0.05 + R() * 0.09})`); gr.addColorStop(1, `rgba(${c},0)`);
     g.fillStyle = gr; g.fillRect(x, y, wd, len);
   }
-  speckle(g, w, h, 30000 * scale, ['#1f2f2a', '#7aa595', '#4d7566', '#8a7a55'], 0.5, 2.2, 0.15, 0.5);
+  blotches(g, w, h, 120 * scale, ['#4a4434', '#3e3a2e', '#54503c'], 30 * scale, 160 * scale, 0.4); // bronze-brown where the verdigris is thin
+  blotches(g, w, h, 700 * scale, ['#7fbfae', '#9ad0c0', '#5aa596'], 4 * scale, 22 * scale, 0.4);
+  speckle(g, w, h, 30000 * scale, ['#16302c', '#6aa595', '#3d7566', '#7a6a45'], 0.5, 2.2, 0.15, 0.5);
 }
-
-// Main screen: cipher on the left half; tableau on the right half, cut mirror-image so it reads only from the back.
-const COLS = 67, TAB_COL = 35;
-const scrollTex = canvasTex(4096, 2048, (g, w, h) => {
-  copperBase(g, w, h, 1.6);
-  const mx = 40, my = 70, cw = (w - 2 * mx) / COLS, rh = (h - 2 * my) / 28, fs = Math.round(rh * 0.82);
-  // four copper plates: seams between the halves and across the middle
-  for (const [x, y, ww, hh] of [[mx + (TAB_COL - 0.75) * cw, 0, 4, h], [0, h / 2 - 2, w, 4]]) {
-    g.fillStyle = 'rgba(15,25,22,0.8)'; g.fillRect(x, y, ww, hh);
-    g.fillStyle = 'rgba(150,200,180,0.35)'; g.fillRect(x + (ww > hh ? 0 : ww), y + (ww > hh ? hh : 0), ww > hh ? ww : 2, ww > hh ? 2 : hh);
-  }
-  g.globalCompositeOperation = 'destination-out';
-  g.fillStyle = '#000'; g.strokeStyle = '#000'; g.lineJoin = 'round'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  const cut = (ch, x, y, size) => { g.lineWidth = size * 0.07; g.fillText(ch, x, y); g.strokeText(ch, x, y); }; // stroke weight of the cut letters
-  const font = s => `bold ${s}px "Courier New", Courier, "Nimbus Mono PS", monospace`; // typewriter serif, as cut
-  CIPHER_ROWS.forEach((row, r) => [...row].forEach((ch, c) => {
-    // the only superscript letters on the sculpture: Y, A, R near the start of the lower half
-    const sup = r === 14 && (c === 3 || c === 4 || c === 6);
-    g.font = font(sup ? Math.round(fs * 0.62) : fs);
-    cut(ch, mx + (c + 0.5) * cw, my + (r + (sup ? 0.32 : 0.55)) * rh, sup ? fs * 0.62 : fs);
-  }));
-  g.font = font(fs);
-  const x0 = mx + TAB_COL * cw, x1 = w - mx;
-  g.save(); g.translate(x0 + x1, 0); g.scale(-1, 1);
-  TABLEAU_ROWS.forEach((row, r) => [...row].forEach((ch, c) => {
-    if (ch !== ' ') cut(ch, x0 + (c + 0.5) * cw, my + (r + 0.55) * rh, fs);
-  }));
-  g.restore();
-  g.globalCompositeOperation = 'source-over';
-});
-scrollTex.wrapS = scrollTex.wrapT = THREE.ClampToEdgeWrapping;
 
 const graniteRed = canvasTex(512, 512, (g, w, h) => {
   g.fillStyle = '#8a5a4e'; g.fillRect(0, 0, w, h);
@@ -328,15 +314,22 @@ const petrified = canvasTex(512, 1024, (g, w, h) => {
 });
 // tiling ground textures; geometry UVs are world metres, so repeat = 1 / tile size
 const grassTex = canvasTex(512, 512, (g, w, h) => {
-  g.fillStyle = '#4c6a2c'; g.fillRect(0, 0, w, h);
-  speckle(g, w, h, 24000, ['#3a5422', '#5f7e36', '#6f8c3e', '#2e4419', '#7e8f4a'], 0.5, 1.8, 0.3, 0.9);
+  g.fillStyle = '#566e34'; g.fillRect(0, 0, w, h);
+  speckle(g, w, h, 24000, ['#445a28', '#69823c', '#788f46', '#3a4c20', '#8a9552'], 0.5, 1.8, 0.3, 0.9);
 }, { repeat: [1 / 4, 1 / 4] });
-const paverTex = canvasTex(512, 512, (g, w, h) => {
-  g.fillStyle = '#8f897e'; g.fillRect(0, 0, w, h);
-  blotches(g, w, h, 40, ['#7a7468', '#a19a8d', '#6e695f'], 30, 120, 0.15);
-  speckle(g, w, h, 8000, ['#6f6a61', '#aaa395', '#837d72'], 0.4, 1.5, 0.2, 0.6);
-  g.strokeStyle = '#6f6a62'; g.lineWidth = 3;
-  for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, h); g.stroke(); g.beginPath(); g.moveTo(0, i * 128); g.lineTo(w, i * 128); g.stroke(); }
+// plaza paving: flamed pinkish-grey granite. `graniteFlamed` is the bare stone, `paverTex` the 0.6 m square grid.
+const flamed = (g, w, h) => {
+  g.fillStyle = '#b8b1a8'; g.fillRect(0, 0, w, h);
+  blotches(g, w, h, 60, ['#a59c94', '#c6beb4', '#b0a39a'], 30, 140, 0.25);
+  speckle(g, w, h, w * h * 0.05, ['#7f7872', '#d2cac0', '#958a84', '#e6ded4', '#6c6662', '#b89a90'], 0.4, 1.4, 0.2, 0.55);
+};
+const graniteFlamed = canvasTex(512, 512, flamed, { repeat: [1 / 1.2, 1 / 1.2] });
+const paverTex = canvasTex(1024, 1024, (g, w, h) => {
+  flamed(g, w, h);
+  const n = 4, c = w / n;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { g.fillStyle = R() < 0.5 ? '#000' : '#fff'; g.globalAlpha = R() * 0.07; g.fillRect(i * c, j * c, c, c); }
+  g.globalAlpha = 1; g.strokeStyle = '#6a645e'; g.lineWidth = 2.5;
+  for (let i = 0; i <= n; i++) { g.beginPath(); g.moveTo(i * c, 0); g.lineTo(i * c, h); g.stroke(); g.beginPath(); g.moveTo(0, i * c); g.lineTo(w, i * c); g.stroke(); }
 }, { repeat: [1 / 2.4, 1 / 2.4] });
 const concreteTex = canvasTex(512, 512, (g, w, h) => {
   g.fillStyle = '#a19c92'; g.fillRect(0, 0, w, h);
@@ -352,10 +345,13 @@ const mulchTex = canvasTex(256, 256, (g, w, h) => {
   g.fillStyle = '#4a3324'; g.fillRect(0, 0, w, h);
   speckle(g, w, h, 6000, ['#2e2016', '#6a4a30', '#5a3e28'], 0.5, 2, 0.3, 0.9);
 }, { repeat: [1 / 2, 1 / 2] });
-const leafTex = canvasTex(256, 256, (g, w, h) => {
-  g.fillStyle = '#d4d4d4'; g.fillRect(0, 0, w, h);
-  speckle(g, w, h, 14000, ['#a8a8a8', '#f4f4f4', '#c8c8c8', '#8c8c8c'], 0.4, 1.4, 0.3, 0.6);
-}, { repeat: [6, 6] });
+const leafTex = canvasTex(256, 256, (g, w, h) => { // leaf masses with gaps, so crowns read as foliage rather than solids
+  g.clearRect(0, 0, w, h);
+  for (let i = 0; i < 420; i++) {
+    g.fillStyle = ['#a8a8a8', '#f4f4f4', '#c8c8c8', '#8c8c8c', '#dcdcdc'][(R() * 5) | 0];
+    g.beginPath(); g.ellipse(R() * w, R() * h, 7 + R() * 9, 4 + R() * 6, R() * 3, 0, 7); g.fill();
+  }
+}, { repeat: [3, 3] });
 const barkTex = canvasTex(128, 512, (g, w, h) => {
   g.fillStyle = '#4a3f35'; g.fillRect(0, 0, w, h);
   for (let x = 0; x < w; x += 2 + R() * 4) { g.fillStyle = R() < 0.5 ? '#2c241e' : '#615446'; g.globalAlpha = 0.6; g.fillRect(x, 0, 1 + R() * 2, h); }
@@ -375,41 +371,50 @@ function normalTex(S, hgt, k) { // tangent-space normal map from a height functi
 const whirlNormal = normalTex(512, (x, y) => { const r = Math.hypot(x, y); return Math.sin(5 * Math.atan2(y, x) + 26 * r) * Math.exp(-r * 1.2) * 0.6 + Math.sin(23 * x + 3 * y) * 0.05; }, 0.02);
 const calmNormal = normalTex(256, (x, y) => 0.02 * (Math.sin(9 * x + 2 * y) + Math.sin(-4 * x + 11 * y) + 0.5 * Math.sin(21 * x - 17 * y)), 0.05);
 
-// Facades: 8x8 bay atlas so lit windows at night vary. UVs are world metres.
+// Facades: 8x8 bay atlas so lit windows at night vary. UVs are world metres. Each style draws three layers: colour,
+// night emission, and a roughness/metalness map so glass mirrors the sky while concrete stays matt.
 function facade(style) {
   const lit = [];
-  const draw = (g, w, h, night) => {
-    const cw = w / 8, ch = h / 8;
+  const draw = (g, w, h, mode) => {
+    const cw = w / 8, ch = h / 8, night = mode === 'em', rm = mode === 'rm';
+    const CONC = rm ? '#00d800' : night ? '#000' : '#dcd8ce', FRAME = rm ? '#008030' : night ? '#000' : '#eef0ea', GLASS_RM = '#002c70';
     for (let by = 0; by < 8; by++) for (let bx = 0; bx < 8; bx++) {
       const x = bx * cw, y = by * ch, on = lit[by * 8 + bx] ??= R() < 0.35;
-      if (style === 'ohb') { // 1961 precast concrete grid
-        g.fillStyle = night ? '#000' : '#d6d1c6'; g.fillRect(x, y, cw, ch);
-        g.fillStyle = night ? (on ? '#ffd8a0' : '#000') : '#2d3a44';
-        g.fillRect(x + cw * 0.18, y + ch * 0.14, cw * 0.64, ch * 0.62);
-        if (!night) { g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(x + cw * 0.18, y + ch * 0.14, cw * 0.64, ch * 0.18); g.fillStyle = '#b9b3a7'; g.fillRect(x, y, cw * 0.06, ch); g.fillRect(x + cw * 0.94, y, cw * 0.06, ch); }
-      } else if (style === 'nhb') { // 1991 green glass bands
-        g.fillStyle = night ? '#000' : '#c8c2b4'; g.fillRect(x, y, cw, ch);
-        const gr = g.createLinearGradient(x, y, x + cw, y + ch * 0.7);
-        gr.addColorStop(0, '#5b8a86'); gr.addColorStop(1, '#2e4f4c');
-        g.fillStyle = night ? (on ? '#ffe2b0' : '#000') : gr; g.fillRect(x, y, cw, ch * 0.68);
-        if (!night) { g.fillStyle = '#8a8d86'; g.fillRect(x + cw * 0.49, y, cw * 0.02, ch * 0.68); }
-      } else { // glazed cafeteria / entrance
-        g.fillStyle = night ? (bx % 3 ? '#6a5a44' : '#4a3e30') : '#3a5250'; g.fillRect(x, y, cw, ch);
-        if (!night) { g.fillStyle = '#7d7f79'; g.fillRect(x, y, cw * 0.04, ch); g.fillRect(x, y, cw, ch * 0.04); }
+      const pane = (px, py, pw, ph, c0, c1) => {
+        if (rm) g.fillStyle = GLASS_RM; else if (night) g.fillStyle = on ? '#ffdfae' : '#000';
+        else { const gr = g.createLinearGradient(px, py, px + pw * 0.4, py + ph); gr.addColorStop(0, c0); gr.addColorStop(1, c1); g.fillStyle = gr; }
+        g.fillRect(px, py, pw, ph);
+      };
+      if (style === 'ohb') { // 1961 precast concrete grid with deep-set windows
+        g.fillStyle = CONC; g.fillRect(x, y, cw, ch);
+        pane(x + cw * 0.18, y + ch * 0.14, cw * 0.64, ch * 0.62, '#3a4a56', '#22303a');
+        if (!night && !rm) { g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(x + cw * 0.18, y + ch * 0.14, cw * 0.64, ch * 0.18); g.fillStyle = '#b9b3a7'; g.fillRect(x, y, cw * 0.06, ch); g.fillRect(x + cw * 0.94, y, cw * 0.06, ch); }
+      } else if (style === 'nhb') { // 1991 curtain wall: pale aqua spandrel glass, strips of narrow green panes, white frames (CIA photograph)
+        g.fillStyle = rm ? GLASS_RM : night ? '#000' : (by % 2 ? '#b4dccf' : '#a9d6cb'); g.fillRect(x, y, cw, ch);
+        const y0 = y + ch * 0.3, wh = ch * 0.45, f = cw * 0.014;
+        for (let i = 0; i < 4; i++) pane(x + i * cw / 4 + f, y0, cw / 4 - 2 * f, wh, '#4f8476', '#28574c');
+        g.fillStyle = FRAME; for (let i = 0; i <= 4; i++) g.fillRect(x + i * cw / 4 - f, y, 2 * f, ch);
+        for (const yy of [y, y0 - ch * 0.012, y0 + wh, y + ch * 0.988]) g.fillRect(x, yy, cw, ch * 0.012);
+      } else { // cafeteria and entrance hall: clear glass in a slender white grid
+        g.fillStyle = FRAME; g.fillRect(x, y, cw, ch);
+        const f = cw * 0.025;
+        for (let j = 0; j < 3; j++) { const ph = ch / 3; pane(x + f, y + j * ph + f, cw - 2 * f, ph - 2 * f, night ? '' : '#4d6a6a', '#27393b'); }
+        if (night && on) { g.fillStyle = 'rgba(255,214,150,0.55)'; g.fillRect(x, y, cw, ch); }
       }
     }
   };
-  return { map: canvasTex(1024, 1024, (g, w, h) => draw(g, w, h, false)), em: canvasTex(1024, 1024, (g, w, h) => draw(g, w, h, true)) };
+  const tex = mode => canvasTex(1024, 1024, (g, w, h) => draw(g, w, h, mode), { color: mode !== 'rm' });
+  return { map: tex('map'), em: tex('em'), rm: tex('rm') };
 }
 const FAC = {
-  ohb: { ...facade('ohb'), bay: 3.0, floor: 4.0, rough: 0.8, metal: 0.0 },
-  nhb: { ...facade('nhb'), bay: 3.2, floor: 4.0, rough: 0.25, metal: 0.35 },
-  glass: { ...facade('glass'), bay: 2.4, floor: 4.0, rough: 0.12, metal: 0.4 },
+  ohb: { ...facade('ohb'), bay: 3.0, floor: 4.0 },
+  nhb: { ...facade('nhb'), bay: 3.2, floor: 4.0 },
+  glass: { ...facade('glass'), bay: 1.5, floor: 4.2 },
 };
 const facadeMats = {};
 for (const [k, f] of Object.entries(FAC)) {
-  for (const t of [f.map, f.em]) t.repeat.set(1 / (f.bay * 8), 1 / (f.floor * 8));
-  facadeMats[k] = std({ map: f.map, emissiveMap: f.em, emissive: 0xffffff, emissiveIntensity: 0, roughness: f.rough, metalness: f.metal });
+  for (const t of [f.map, f.em, f.rm]) t.repeat.set(1 / (f.bay * 8), 1 / (f.floor * 8));
+  facadeMats[k] = std({ map: f.map, emissiveMap: f.em, emissive: 0xffffff, emissiveIntensity: 0, roughnessMap: f.rm, metalnessMap: f.rm, roughness: 1, metalness: 1, envMapIntensity: 0.7 });
 }
 const roofMat = std({ color: 0x8a8378, roughness: 0.95 });
 
@@ -475,7 +480,6 @@ function drape(geo, off, maxEdge = 5) {
 }
 for (const m of [mats.grass, mats.wood, mats.park, mats.flowerbed, mats.sand, mats.water]) Object.assign(m, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
 const LAYER_Y = { park: 0.025, wood: 0.035, grass: 0.045, flowerbed: 0.055, sand: 0.055, water: 0.065 };
-const KRYPTOS_PATIO = 9.5;
 for (const kind of Object.keys(LAYER_Y)) {
   const geos = SITE.filter(f => f.k === kind).map(f => new THREE.ShapeGeometry(toShape(f.o, f.h)).rotateX(-Math.PI / 2));
   if (geos.length) add(new THREE.Mesh(drape(mergeGeometries(geos), LAYER_Y[kind]), mats[kind]), { cast: false });
@@ -502,9 +506,19 @@ const walkGeo = roads.filter(f => ['footway', 'path', 'pedestrian', 'steps'].inc
 add(new THREE.Mesh(drape(mergeGeometries(roadGeo), 0.07), mats.park), { cast: false });
 const paverMat = std({ map: paverTex, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
 add(new THREE.Mesh(drape(mergeGeometries(walkGeo), 0.08), paverMat), { cast: false });
-// paved plaza around the sculpture ("the concrete plaza", Sanborn)
-add(new THREE.Mesh(drape(new THREE.CircleGeometry(KRYPTOS_PATIO, 48).rotateX(-Math.PI / 2), 0.09, 2), paverMat), { cast: false });
+// entrance approach as built (aerial imagery): a 3.8 m concrete walk ending in a round forecourt at the glass entrance hall
+add(new THREE.Mesh(drape(mergeGeometries([ribbon([[-124.5, 65.1], [-80.5, 52.6]], 3.8), new THREE.CircleGeometry(6.4, 40).rotateX(-Math.PI / 2).translate(-75.1, 0, 50.2)].map(g => { const n = g.index ? g.toNonIndexed() : g; n.deleteAttribute('normal'); return n; })), 0.095, 3), std({ map: concreteTex, color: 0xf2efe8, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 })), { cast: false });
 
+{ // forecourt: a band of pink granite pavers around the concrete centre (CIA photograph)
+  const pinkPaver = canvasTex(512, 512, (g, w, h) => {
+    g.fillStyle = '#b08a80'; g.fillRect(0, 0, w, h);
+    speckle(g, w, h, 14000, ['#8f6a62', '#c9a79c', '#e0c8be', '#7a5a54', '#a37a70'], 0.4, 1.6, 0.25, 0.7);
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) { g.fillStyle = R() < 0.5 ? '#000' : '#fff'; g.globalAlpha = R() * 0.08; g.fillRect(i * 128, j * 128, 128, 128); }
+    g.globalAlpha = 1; g.strokeStyle = '#6f5a55'; g.lineWidth = 2.5;
+    for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, h); g.stroke(); g.beginPath(); g.moveTo(0, i * 128); g.lineTo(w, i * 128); g.stroke(); }
+  }, { repeat: [1 / 2.4, 1 / 2.4] });
+  add(new THREE.Mesh(drape(new THREE.RingGeometry(3.4, 6.4, 48, 2).rotateX(-Math.PI / 2).translate(-75.1, 0, 50.2), 0.105, 3), std({ map: pinkPaver, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 })), { cast: false });
+}
 // ---------- Buildings from OpenStreetMap ----------
 const buildings = SITE.filter(f => f.k === 'b');
 function styleOf(f) {
@@ -521,7 +535,7 @@ function styleOf(f) {
     for (const name of ['position', 'normal', 'uv']) { const a = g.attributes[name]; out.setAttribute(name, new THREE.BufferAttribute(a.array.slice(gr.start * a.itemSize, (gr.start + gr.count) * a.itemSize), a.itemSize)); }
     return out;
   });
-  const roofs = [], byStyle = { ohb: [], nhb: [], glass: [] };
+  const roofs = [], whiteRoofs = [], byStyle = { ohb: [], nhb: [], glass: [] };
   for (const f of buildings) {
     // walls start below the lowest ground point; roof height is measured from the average ground level
     const hs = f.o.map(([x, z]) => H(x, z)), lo = Math.min(...hs), avg = hs.reduce((a, b) => a + b, 0) / hs.length;
@@ -529,127 +543,383 @@ function styleOf(f) {
     const g = new THREE.ExtrudeGeometry(toShape(f.o, f.h), { depth, bevelEnabled: false });
     g.rotateX(-Math.PI / 2); g.translate(0, base, 0);
     const [caps, walls] = split(g);
-    roofs.push(caps); byStyle[styleOf(f)].push(walls);
+    (styleOf(f) === 'glass' ? whiteRoofs : roofs).push(caps); byStyle[styleOf(f)].push(walls);
     if (!f.mh || f.mh < 2) colliders.polys.push({ o: f.o, box: f.o.reduce((b, [x, z]) => [Math.min(b[0], x), Math.max(b[1], x), Math.min(b[2], z), Math.max(b[3], z)], [1e9, -1e9, 1e9, -1e9]) });
   }
   add(new THREE.Mesh(mergeGeometries(roofs), roofMat));
+  add(new THREE.Mesh(mergeGeometries(whiteRoofs), std({ color: 0xe8e8e4, roughness: 0.7 })));
   for (const [k, gs] of Object.entries(byStyle)) if (gs.length) add(new THREE.Mesh(mergeGeometries(gs), facadeMats[k]));
 }
 
-// ---------- Kryptos: the copper screen ----------
-// Front faces the courtyard lawn (south-southeast); seen from the front the petrified tree is on the left.
-// Sanborn's dimensions for this "Plaza" section: 20'L x 10'W x 12'H. Long axis at ~58° true, measured on aerial imagery.
-const THETA = 32 * D2R;
-const kryptos = new THREE.Group(); kryptos.rotation.y = THETA; kryptos.position.y = H(0, 0); scene.add(kryptos);
-const W = (x, z) => [x * Math.cos(THETA) + z * Math.sin(THETA), -x * Math.sin(THETA) + z * Math.cos(THETA)];
-const scrollP = t => new THREE.Vector3(-2.6 + 5.2 * t, 0, 0.75 * Math.sin(2 * Math.PI * t) * (0.7 + 0.3 * t));
-const scrollBot = t => 0.0; // stands directly on the plaza
-const scrollTop = t => 3.25 + 0.3 * Math.sin(Math.PI * t * 0.9) - 0.05 * t;
-const scrollMat = std({ map: scrollTex, side: THREE.DoubleSide, alphaTest: 0.5, metalness: 0.15, roughness: 0.65, shadowSide: THREE.DoubleSide });
-{
-  const N = 220, pos = [], uvs = [], idx = [], arc = [0];
-  let s = 0, prev = scrollP(0);
-  for (let i = 1; i <= N; i++) { const p = scrollP(i / N); s += p.distanceTo(prev); arc.push(s); prev = p; }
-  for (let i = 0; i <= N; i++) {
-    const t = i / N, p = scrollP(t);
-    pos.push(p.x, scrollBot(t), p.z, p.x, scrollTop(t), p.z);
-    uvs.push(arc[i] / s, 0, arc[i] / s, 1);
-    if (i < N) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+{ // Cafeteria: three white barrel vaults whose arches face the lawn, with the glass wall rising to each arch (CIA
+  // courtyard photographs). Spans follow the three OSM sections of the building along its courtyard wall.
+  const SPRING = 4.5, pos = [], idx = [], wpos = [], wuv = [], widx = [];
+  for (const [a, b, rise] of [[[24.4, -13.5], [28.8, 0.8], 2.6], [[28.8, 0.8], [39.3, 39.8], 6.5], [[39.3, 39.8], [43.6, 55.4], 2.8]]) {
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]), d = [(b[0] - a[0]) / len, (b[1] - a[1]) / len], n = [d[1], -d[0]], seg = 24, depth = 32;
+    const arch = t => SPRING + rise * (1 - (2 * t - 1) ** 2), b0 = pos.length / 3, w0 = wpos.length / 3;
+    for (let i = 0; i <= seg; i++) {
+      const t = i / seg, x = a[0] + d[0] * len * t, z = a[1] + d[1] * len * t, y = arch(t);
+      pos.push(x - n[0] * 0.9, y + 0.25, z - n[1] * 0.9, x + n[0] * depth, y + 0.25, z + n[1] * depth); // roof, with an eave over the glass
+      wpos.push(x - n[0] * 0.05, SPRING - 0.1, z - n[1] * 0.05, x - n[0] * 0.05, y, z - n[1] * 0.05); wuv.push(len * t, SPRING - 0.1, len * t, y);
+      if (i < seg) { idx.push(b0 + i * 2, b0 + i * 2 + 2, b0 + i * 2 + 1, b0 + i * 2 + 1, b0 + i * 2 + 2, b0 + i * 2 + 3); widx.push(w0 + i * 2, w0 + i * 2 + 1, w0 + i * 2 + 2, w0 + i * 2 + 1, w0 + i * 2 + 3, w0 + i * 2 + 2); }
+    }
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geo.setIndex(idx); geo.computeVertexNormals();
-  add(new THREE.Mesh(geo, scrollMat), { parent: kryptos });
-  for (let i = 0; i <= 16; i++) { const p = scrollP(i / 16), [x, z] = W(p.x, p.z); colliders.circles.push({ x, z, r: 0.35 }); }
-  const edgeMat = std({ color: 0x6a4a30, metalness: 0.6, roughness: 0.5 });
-  for (const yf of [scrollBot, scrollTop]) {
-    const pts = []; for (let i = 0; i <= 60; i++) { const t = i / 60, p = scrollP(t); pts.push(new THREE.Vector3(p.x, yf(t), p.z)); }
-    add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 120, 0.018, 6), edgeMat), { parent: kryptos });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  add(new THREE.Mesh(g, std({ color: 0xf0f0ec, roughness: 0.6, side: THREE.DoubleSide })));
+  const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wpos, 3)); wg.setAttribute('uv', new THREE.Float32BufferAttribute(wuv, 2)); wg.setIndex(widx); wg.computeVertexNormals();
+  const wm = facadeMats.glass.clone(); wm.side = THREE.DoubleSide; add(new THREE.Mesh(wg, wm));
+}
+
+{ // Stepped wing: between its concrete bays, sloped glass roofs run down from each tier to the next (CIA rooftop photograph)
+  const L = [[[-28.5, -0.8], [-7.7, 73.5]], [[-23.9, -2.0], [-3.1, 72.2]], [[-19.3, -3.3], [1.5, 70.9]], [[-14.7, -4.5], [6.1, 69.6]]], HT = [22, 16, 11, 6];
+  const pos = [], uv = [], idx = [], at = (l, t) => [l[0][0] + (l[1][0] - l[0][0]) * t, l[0][1] + (l[1][1] - l[0][1]) * t];
+  for (let j = 0; j < 3; j++) for (const [t0, t1] of [[0.08, 0.26], [0.4, 0.58], [0.72, 0.9]]) {
+    const b = pos.length / 3, w = Math.hypot(L[j + 1][0][0] - L[j][0][0], L[j + 1][0][1] - L[j][0][1]), sl = Math.hypot(w, HT[j] - HT[j + 1]) * 0.75;
+    for (const [l, h, v] of [[L[j], HT[j + 1] + (HT[j] - HT[j + 1]) * 0.75, sl], [L[j + 1], HT[j + 1] + 0.05, 0]]) for (const t of [t0, t1]) { const [x, z] = at(l, t); pos.push(x, h, z); uv.push(t * 77, v); }
+    idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const m = facadeMats.glass.clone(); m.side = THREE.DoubleSide; m.color.set(0xa8e0d2); add(new THREE.Mesh(g, m));
+}
+
+{ // NHB entrance (CIA photographs): a glass barrel vault over the entrance hall ending in a white arch portal on concrete
+  // piers at the forecourt, flanked by a one-storey precast colonnade with dark green marble columns.
+  const Wp = [-65, 48.75], Ep = [-18, 36.25], Lh = Math.hypot(Ep[0] - Wp[0], Ep[1] - Wp[1]), R0 = 5.3, SP = 6.5;
+  const hall = new THREE.Group(); hall.position.set(Wp[0], H(...Wp) + SP, Wp[1]); hall.rotation.y = Math.atan2(-(Ep[0] - Wp[0]), -(Ep[1] - Wp[1])); scene.add(hall); // local -z runs into the building
+  const white = std({ color: 0xf2f1ec, roughness: 0.6 }), precast = std({ map: concreteTex, color: 0xe6dccb, roughness: 0.85 }), marble = std({ color: 0x1f2f2a, roughness: 0.25, metalness: 0.1 });
+  const skin = std({ color: 0x8fcfc4, roughness: 0.12, metalness: 0.35, envMapIntensity: 0.9, side: THREE.DoubleSide });
+  add(new THREE.Mesh(new THREE.CylinderGeometry(R0, R0, Lh, 32, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2).translate(0, 0, -Lh / 2), skin), { parent: hall });
+  for (let z = 0; z >= -Lh; z -= 4.05) add(new THREE.Mesh(new THREE.TorusGeometry(R0 + 0.03, 0.09, 5, 28, Math.PI), white), { parent: hall, cast: false }).position.z = z;
+  for (let a = 0.26; a < 3; a += 0.52) add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, Lh), white), { parent: hall, cast: false }).position.set(Math.cos(a) * (R0 + 0.03), Math.sin(a) * (R0 + 0.03), -Lh / 2);
+  const ring = new THREE.Shape(); ring.absarc(0, 0, R0 + 1.5, 0, Math.PI, false); ring.absarc(0, 0, R0, Math.PI, 0, true);
+  add(new THREE.Mesh(new THREE.ExtrudeGeometry(ring, { depth: 3, bevelEnabled: false, curveSegments: 28 }), white), { parent: hall }).position.z = 0.2;
+  const joint = std({ color: 0x9a9a94, roughness: 0.8 });
+  for (let a = Math.PI / 7; a < 3; a += Math.PI / 7) { // the arch is faced in panels; joints show as radial lines
+    const j = add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.035, 3.02), joint), { parent: hall, cast: false });
+    j.position.set(Math.cos(a) * (R0 + 0.75), Math.sin(a) * (R0 + 0.75), 1.71); j.rotation.z = a;
+  }
+  const endGlass = facadeMats.glass.clone(); endGlass.side = THREE.DoubleSide;
+  { // glazed end wall: mullion grid in the arch, a row of doors below (CIA photograph)
+    const fan = new THREE.CircleGeometry(R0, 28, 0, Math.PI), uvA = fan.attributes.uv, pA = fan.attributes.position;
+    for (let i = 0; i < uvA.count; i++) uvA.setXY(i, pA.getX(i) + R0, pA.getY(i) + SP);
+    add(new THREE.Mesh(fan, endGlass), { parent: hall }).position.z = 0.4;
+    const low = new THREE.PlaneGeometry(2 * R0, SP), uvL = low.attributes.uv; for (let i = 0; i < uvL.count; i++) uvL.setXY(i, uvL.getX(i) * 2 * R0, uvL.getY(i) * SP);
+    add(new THREE.Mesh(low, endGlass), { parent: hall }).position.set(0, -SP / 2, 0.4);
+    add(new THREE.Mesh(new THREE.BoxGeometry(2 * R0, 0.3, 0.25), white), { parent: hall, cast: false }).position.set(0, -SP + 2.5, 0.5);
+    const steel = std({ color: 0xb8bcbc, metalness: 0.8, roughness: 0.3 });
+    for (let x = -R0 + 0.66; x < R0; x += 1.32) {
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.5, 0.2), white), { parent: hall, cast: false }).position.set(x, -SP + 1.25, 0.5);
+      if (x + 1.32 < R0) { // a glazed door leaf in each bay: bottom rail, push bar, closer rail
+        for (const [yy, hh] of [[0.12, 0.24], [1.05, 0.05], [2.3, 0.12]]) add(new THREE.Mesh(new THREE.BoxGeometry(1.2, hh, 0.06), yy === 1.05 ? steel : white), { parent: hall, cast: false }).position.set(x + 0.66, -SP + yy, 0.52);
+      }
+    }
+  }
+  for (const sx of [-1, 1]) {
+    add(new THREE.Mesh(new THREE.BoxGeometry(2.6, SP + 0.4, 3.4), precast), { parent: hall }).position.set(sx * (R0 + 1.2), -SP / 2 + 0.2, 1.7);
+    add(new THREE.Mesh(new THREE.BoxGeometry(1.1, 3.4, 1.1), marble), { parent: hall }).position.set(sx * (R0 + 1.2), -SP + 2.3, 3.6);
+  }
+  add(new THREE.Mesh(new THREE.BoxGeometry(2 * R0 + 5, 1.1, 3.4), precast), { parent: hall }).position.set(0, -0.3, 1.7); // beam under the arch
+  // colonnade wings along the tower bases, each side of the portal
+  for (const [A, B, t0, t1] of [[[-69.6, 10.3], [-66, 43.5], 0.25, 0.97], [[-64, 54], [-48.6, 84.9], 0.03, 0.7]]) {
+    const len = Math.hypot(B[0] - A[0], B[1] - A[1]), d = [(B[0] - A[0]) / len, (B[1] - A[1]) / len], n = [-d[1], d[0]].map(v => v * (d[1] > 0 ? 1 : -1)), nn = n[0] < 0 ? n : [-n[0], -n[1]];
+    const p0 = [A[0] + d[0] * len * t0, A[1] + d[1] * len * t0], L = len * (t1 - t0), mid = [p0[0] + d[0] * L / 2 + nn[0] * 2.2, p0[1] + d[1] * L / 2 + nn[1] * 2.2];
+    const wing = new THREE.Group(); wing.position.set(mid[0], H(...mid), mid[1]); wing.rotation.y = -Math.atan2(d[1], d[0]); scene.add(wing);
+    add(new THREE.Mesh(new THREE.BoxGeometry(L, 1.6, 4.6), precast), { parent: wing }).position.y = 4.9; // fascia and roof slab
+    const gl = add(new THREE.Mesh(new THREE.PlaneGeometry(L, 4.2), endGlass), { parent: wing }); gl.position.set(0, 2.1, 0); gl.geometry.attributes.uv.array.forEach((v, i, a) => { a[i] = v * (i % 2 ? 4.2 : L); });
+    for (let x = -L / 2 + 0.6; x <= L / 2; x += 3.6) { // about seven columns show along the wing in the photograph
+      add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 3.0, 0.9), marble), { parent: wing }).position.set(x, 2.6, 1.8 * (nn[0] * Math.sin(wing.rotation.y) * -1 + nn[1] * Math.cos(wing.rotation.y) > 0 ? 1 : -1));
+      add(new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 1.2), precast), { parent: wing }).position.set(x, 0.55, 1.8 * (nn[0] * Math.sin(wing.rotation.y) * -1 + nn[1] * Math.cos(wing.rotation.y) > 0 ? 1 : -1));
+    }
   }
 }
-// petrified tree supporting the screen
+
+// ---------- Kryptos: the copper screen ----------
+// Local frame: origin at the centre of the pool, y = 0 on the paving, +z toward the viewer who reads the cipher, +x to
+// that viewer's right. Position and facing come from aerial imagery (the pool disc and the shadows of the screen and the
+// tree) and from the sun direction in dated photographs: the cipher side faces east across the lawn, the tableau side
+// faces the New Headquarters Building.
+const THETA = 80 * D2R;
+const kryptos = new THREE.Group(); kryptos.rotation.y = THETA; kryptos.position.set(KX, H(KX, KZ) + PAVE_Y, KZ); scene.add(kryptos);
+const W = (x, z) => [KX + x * Math.cos(THETA) + z * Math.sin(THETA), KZ - x * Math.sin(THETA) + z * Math.cos(THETA)];
+// Plan curve of the screen, s in metres from the petrified tree to the free end. The cipher plates leave the tree in a
+// nearly straight run toward the viewer, turn tightly, then ease across to the seam; the tableau plates wrap the pool
+// the other way. Arc lengths follow the letter grid (about 9.5 cm columns, 10.4 cm rows). The turns were fitted to
+// which letter columns sit on the silhouette in photographs from the front, the back and both ends, and checked
+// against the base line and shadows in aerial imagery.
+const SC = { H: 3.05, GAP: 0.03, L1: 3.15, L2: 3.1, R2: 1.12, A0: 100 * D2R, T: 0.009 };
+const SC_TURN = [[0, -8 / 1.0], [1.0, -90 / 0.9], [1.9, -57 / 1.25], [SC.L1, 180 / Math.PI / SC.R2]]; // [from s, degrees per metre]
+const scr = (() => {
+  const n = 400, L = SC.L1 + SC.L2, ds = L / n, P = [];
+  const turn = s => { // piecewise curvature, blended over 12 cm at each change
+    let k = SC_TURN[0][1];
+    for (let i = 1; i < SC_TURN.length; i++) k += (SC_TURN[i][1] - SC_TURN[i - 1][1]) * smooth(SC_TURN[i][0] - 0.06, SC_TURN[i][0] + 0.06, s);
+    return k * D2R;
+  };
+  let a = SC.A0, x = 0, z = 0;
+  for (let i = 0; i <= n; i++) {
+    P.push({ s: i * ds, x, z, a });
+    a += turn((i + 0.5) * ds) * ds;
+    x += Math.cos(a) * ds; z += Math.sin(a) * ds;
+  }
+  const e = P[n], cx = e.x - Math.sin(e.a) * SC.R2, cz = e.z + Math.cos(e.a) * SC.R2; // pool centre = centre of the tableau arc
+  for (const p of P) { p.x -= cx; p.z -= cz; }
+  return { P, n, L, ds };
+})();
+const TEXN = Math.min(coarse ? 2048 : 4096, renderer.capabilities.maxTextureSize);
+const PLATE_FONT = '"Domine", Georgia, "Times New Roman", serif';
+await Promise.race([document.fonts.load(`700 64px ${PLATE_FONT}`), new Promise(r => setTimeout(r, 2500))]).catch(() => {});
+// One texture per pair of plates (upper and lower). Letters are cut right through; `mirror` cuts them reversed so they
+// read from the other side. Letters with enclosed counters keep a thin tie so the island stays attached.
+function plateTex(rows, lenM, mirror) {
+  const t = canvasTex(TEXN, TEXN, (g, w, h) => {
+    copperBase(g, w, h, w / 2560);
+    const pxm = h / SC.H, mt = 0.05 * pxm, seam = 0.04 * pxm, rh = (h - 2 * mt - seam) / 28, mx = 0.05 / lenM * w;
+    const ys = mt + 14 * rh + seam / 2; // joint between the upper and lower plate
+    g.fillStyle = 'rgba(8,20,18,0.9)'; g.fillRect(0, ys - 0.003 * pxm, w, 0.006 * pxm);
+    g.fillStyle = 'rgba(150,205,185,0.3)'; g.fillRect(0, ys + 0.003 * pxm, w, 0.004 * pxm);
+    const m = document.createElement('canvas'); m.width = w; m.height = h;
+    const mg = m.getContext('2d'), fs = rh * 0.98, tie = Math.max(3, 0.006 * pxm);
+    mg.fillStyle = mg.strokeStyle = '#000'; mg.lineJoin = 'round'; mg.textAlign = 'center'; mg.textBaseline = 'alphabetic';
+    if (mirror) { mg.translate(w, 0); mg.scale(-1, 1); }
+    mg.font = `700 ${fs}px ${PLATE_FONT}`;
+    const cap = mg.measureText('H').actualBoundingBoxAscent, ncol = Math.max(...rows.map(r => r.length));
+    rows.forEach((row, r) => {
+      const cw = (w - 2 * mx) / (mirror ? ncol : row.length), yb = mt + r * rh + (r >= 14 ? seam : 0) + (rh + cap) / 2;
+      [...row].forEach((ch, c) => {
+        if (ch === ' ') return;
+        const x = mx + (c + 0.5) * cw;
+        // the only raised letters on the sculpture: Y, A, R near the start of the lower cipher plate
+        const sup = !mirror && r === 14 && (c === 3 || c === 4 || c === 6), k = sup ? 0.62 : 1, y = yb - (sup ? cap * 0.42 : 0);
+        mg.font = `700 ${fs * k}px ${PLATE_FONT}`; mg.lineWidth = fs * k * 0.035;
+        mg.save(); mg.translate(x, y); mg.scale(1.16, 1); // the cut letters are heavy and slightly extended
+        mg.fillText(ch, 0, 0, cw * 0.8); mg.strokeText(ch, 0, 0, cw * 0.8); mg.restore();
+        if ('ABDOPQR'.includes(ch)) mg.clearRect(x - tie / 2, y - cap * k - 2, tie, 'APR'.includes(ch) ? cap * k * 0.5 : cap * k + 4);
+      });
+    });
+    g.globalCompositeOperation = 'destination-out'; g.drawImage(m, 0, 0); g.globalCompositeOperation = 'source-over';
+  });
+  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t;
+}
+const edgeCopper = std({ color: 0x5f8f7c, metalness: 0.5, roughness: 0.5 });
 {
-  const geo = new THREE.CylinderGeometry(0.38, 0.46, 4.2, 28, 18);
+  const i1 = Math.round(SC.L1 / scr.ds), y0 = SC.GAP, y1 = SC.GAP + SC.H;
+  // a strip of the plan curve between two heights/offsets; `d0`/`d1` are offsets along the surface normal
+  const strip = (ia, ib, d0, ya, d1, yb) => {
+    const pos = [], uv = [], idx = [], s0 = scr.P[ia].s, sl = scr.P[ib].s - s0;
+    for (let i = ia; i <= ib; i++) {
+      const p = scr.P[i], nx = -Math.sin(p.a), nz = Math.cos(p.a), u = (p.s - s0) / sl;
+      pos.push(p.x + nx * d0, ya, p.z + nz * d0, p.x + nx * d1, yb, p.z + nz * d1); uv.push(u, 0, u, 1);
+      if (i < ib) { const a = (i - ia) * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx); g.computeVertexNormals(); return g;
+  };
+  for (const [ia, ib, rows, len, mirror] of [[0, i1 - 1, CIPHER_ROWS, SC.L1, false], [i1 + 1, scr.n, TABLEAU_ROWS, SC.L2, true]]) {
+    const tex = plateTex(rows, len, mirror);
+    const face = std({ map: tex, side: THREE.DoubleSide, alphaTest: 0.5, alphaToCoverage: true, metalness: 0.08, roughness: 0.78, shadowSide: THREE.DoubleSide });
+    // the cut edges of the plate: the same cut-outs, brighter, stacked between the two faces
+    const cutEdge = std({ map: tex, side: THREE.DoubleSide, alphaTest: 0.5, alphaToCoverage: true, metalness: 0.75, roughness: 0.38 });
+    cutEdge.color.setRGB(2.4, 1.9, 1.55);
+    for (let k = -2; k <= 2; k++) {
+      const d = k * SC.T / 4;
+      add(new THREE.Mesh(strip(ia, ib, d, y0, d, y1), Math.abs(k) === 2 ? face : cutEdge), { parent: kryptos, cast: k === 0 });
+    }
+    for (const y of [y0, y1]) add(new THREE.Mesh(strip(ia, ib, -SC.T / 2, y, SC.T / 2, y), edgeCopper), { parent: kryptos, cast: false });
+  }
+  for (let i = 8; i < scr.n; i += 32) { // small feet holding the plates clear of the paving
+    const p = scr.P[i];
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, SC.GAP + 0.02, 6), edgeCopper), { parent: kryptos, cast: false }).position.set(p.x, SC.GAP / 2, p.z);
+  }
+  for (let i = 0; i <= scr.n; i += 10) { const p = scr.P[i], [x, z] = W(p.x, p.z); colliders.circles.push({ x, z, r: 0.14 }); }
+}
+// Petrified tree at the start of the cipher plates, a little taller than the screen
+const LOG = (() => { const p = scr.P[0]; return { x: p.x - Math.cos(p.a) * 0.27, z: p.z - Math.sin(p.a) * 0.27 }; })();
+{
+  const hgt = 3.72, geo = new THREE.CylinderGeometry(0.26, 0.33, hgt, 48, 40);
   const p = geo.attributes.position;
+  const jag = a => 0.22 + 0.2 * Math.sin(a + 0.6) + 0.07 * Math.sin(a * 4 + 2) + 0.03 * Math.sin(a * 9); // broken top
   for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x);
-    const k = 1 + 0.07 * Math.sin(a * 5 + y * 2) + 0.04 * Math.sin(a * 13 + y * 7);
-    p.setX(i, x * k); p.setZ(i, z * k);
-    if (y > 2.05) p.setY(i, y - (0.15 + 0.25 * Math.abs(Math.sin(a * 3))) * Math.min(1, Math.hypot(x, z) * 3));
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x), t = y / hgt + 0.5;
+    const k = 1 + 0.1 * Math.sin(a * 3 + 1.3 + t) + 0.05 * Math.sin(a * 7 + t * 3) + 0.03 * Math.sin(a * 17) + 0.02 * Math.sin(a * 31 + t * 9) + 0.03 * Math.sin(t * 40 + a);
+    p.setXYZ(i, x * k, (t * (1 - jag(a) / hgt)) * hgt, z * k);
   }
   geo.computeVertexNormals();
-  add(new THREE.Mesh(geo, std({ map: petrified, roughness: 0.75, metalness: 0.05 })), { parent: kryptos }).position.set(-2.95, 2.1, 0.05);
-  const [x, z] = W(-2.95, 0.05); colliders.circles.push({ x, z, r: 0.6 });
+  const tex = (color) => canvasTex(512, 1024, (g, w, h) => {
+    const pal = color ? ['#9c5a3a', '#7e4630', '#b08060', '#63382a', '#a56a4a', '#8e8274', '#c4a584', '#553226', '#7a6a5e'] : ['#555', '#888', '#aaa', '#333', '#999', '#777', '#bbb', '#222'];
+    g.fillStyle = color ? '#8c543a' : '#808080'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) { // long vertical fibres
+      const x = R() * w, y = R() * h, len = 80 + R() * 500, wd = 1 + R() * 5;
+      g.globalAlpha = 0.2 + R() * 0.5; g.fillStyle = pal[(R() * pal.length) | 0]; g.fillRect(x, y, wd, len); if (y + len > h) g.fillRect(x, 0, wd, y + len - h);
+    }
+    if (color) blotches(g, w, h, 30, ['#8f8a80', '#b9b0a2', '#6f6a62'], 30, 120, 0.5); // grey weathered mineral patches
+    g.globalAlpha = 0.85; g.strokeStyle = color ? '#2a1a12' : '#000';
+    for (const y of [0.16, 0.33, 0.52, 0.63, 0.8]) { // the trunk is stacked in sections; cracks run round it
+      g.lineWidth = 2 + R() * 3; g.beginPath(); g.moveTo(0, y * h);
+      for (let x = 0; x <= w; x += 16) g.lineTo(x, y * h + Math.sin(x * 0.05 + y * 20) * 5 + (R() - 0.5) * 4);
+      g.stroke();
+    }
+    for (let i = 0; i < 26; i++) { const x = R() * w, y = R() * h; g.lineWidth = 1 + R() * 2.5; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (R() - 0.5) * 10, y + 60 + R() * 260); g.stroke(); }
+    g.globalAlpha = 1;
+  }, { color });
+  const logMat = std({ map: tex(true), bumpMap: tex(false), bumpScale: 1.5, roughness: 0.85 });
+  add(new THREE.Mesh(geo, logMat), { parent: kryptos }).position.set(LOG.x, 0, LOG.z);
+  // photographs show the trunk as two fused columns: the tall one against the plates and a shorter, thinner one outside it
+  const shard = add(new THREE.Mesh(geo, logMat), { parent: kryptos }), p0 = scr.P[0];
+  shard.position.set(LOG.x + (LOG.x - p0.x) * 1.15, 0, LOG.z + (LOG.z - p0.z) * 1.15 + 0.06); shard.scale.set(0.62, 0.8, 0.62); shard.rotation.y = 2.1;
+  const [x, z] = W(LOG.x, LOG.z); colliders.circles.push({ x, z, r: 0.42 });
 }
 const graniteRedMat = std({ map: graniteRed, roughness: 0.4 });
 const graniteGreenMat = std({ map: graniteGreen, roughness: 0.45 });
 const graniteGreyMat = std({ map: graniteGrey, roughness: 0.6 });
-const quartzMat = std({ color: 0xece8e0, roughness: 0.3, metalness: 0.0 });
+// A quarried slab: flat sawn top and bottom, rough split sides. Side vertices are pushed in and out by a few
+// centimetres, keyed by position so the box stays closed, and the plan outline is knocked slightly out of square.
 function slab(w, h, d, mat, x, y, z, ry = 0, jitter = 0.04, parent = scene) {
-  const geo = new THREE.BoxGeometry(w, h, d, 4, 1, 4);
-  const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) { p.setX(i, p.getX(i) + (R() - 0.5) * jitter); p.setZ(i, p.getZ(i) + (R() - 0.5) * jitter); }
+  const nx = Math.max(4, Math.round(w / 0.35)), nz = Math.max(4, Math.round(d / 0.35));
+  const geo = new THREE.BoxGeometry(w, h, d, nx, 2, nz), p = geo.attributes.position, seen = new Map();
+  const skew = [(R() - 0.5) * 0.06, (R() - 0.5) * 0.06, (R() - 0.5) * 0.08, (R() - 0.5) * 0.08];
+  for (let i = 0; i < p.count; i++) {
+    let px = p.getX(i), py = p.getY(i), pz = p.getZ(i);
+    const key = px.toFixed(3) + ',' + py.toFixed(3) + ',' + pz.toFixed(3);
+    if (!seen.has(key)) {
+      const u = px / (w / 2), v = pz / (d / 2), onX = Math.abs(u) > 0.999, onZ = Math.abs(v) > 0.999;
+      let dx = skew[0] * v * w / 2 + skew[2] * u * v * w / 2, dz = skew[1] * u * d / 2 + skew[3] * u * v * d / 2, dy = 0;
+      if (onX || onZ) { // split face: lumpy, with the middle course standing proud or shy of the edges
+        const lump = (R() - 0.5) * jitter * 1.6 + (py === 0 ? (R() - 0.3) * jitter : 0);
+        if (onX) dx += Math.sign(u) * lump; if (onZ) dz += Math.sign(v) * lump;
+        if (py !== 0) dy = -Math.sign(py) * R() * 0.012; // arrises slightly spalled
+      }
+      seen.set(key, [dx, dy, dz]);
+    }
+    const [dx, dy, dz] = seen.get(key); p.setXYZ(i, px + dx, py + dy, pz + dz);
+  }
   geo.computeVertexNormals();
   const m = add(new THREE.Mesh(geo, mat), { parent }); m.position.set(x, y, z); m.rotation.y = ry; return m;
 }
-const redStoneMat = std({ color: 0x8a3a2a, map: graniteRed, roughness: 0.75 });
 function rock(r, mat, squash = 0.7) {
   const g = new THREE.IcosahedronGeometry(r, 3), p = g.attributes.position, v = new THREE.Vector3(), ph = R() * 9;
   for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); v.multiplyScalar(1 + 0.18 * Math.sin(v.x * 9 / r * 0.4 + ph) * Math.cos(v.z * 7 / r * 0.4) + 0.1 * Math.sin(v.y * 13 / r * 0.4)); v.y *= squash; p.setXYZ(i, v.x, v.y, v.z); }
   g.computeVertexNormals(); return new THREE.Mesh(g, mat);
 }
-{ // in front of the bubbling pool: a long rough red slab and a big white quartz boulder (photographs)
-  const red = add(rock(0.5, redStoneMat, 1), { parent: kryptos }); // rough natural slab, ~2.6 x 1.0 x 0.45 m
-  red.scale.set(2.6, 0.45, 1.0); red.position.set(1.9, 0.2, 1.55); red.rotation.y = -0.25;
-  const q = add(rock(0.6, quartzMat, 0.75), { parent: kryptos }); q.position.set(0.2, 0.32, 1.25); q.rotation.y = 0.7;
-  for (const [lx, lz, r] of [[1.9, 1.55, 1.35], [0.2, 1.25, 0.65]]) { const [x, z] = W(lx, lz); colliders.circles.push({ x, z, r }); }
+// A long slab of red sandstone lying in beds, with broken edges. Displacement depends only on position so the box
+// stays closed at its edges.
+function strataSlab(L, T, D, mats, seed) {
+  const g = new THREE.BoxGeometry(L, T, D, 40, 6, 12), p = g.attributes.position, r = rnd(seed);
+  const beds = Array.from({ length: 7 }, () => [r() * 0.07, r() * 9, r() * 9]);
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const u = x / (L / 2), v = z / (D / 2), [jut, p1, p2] = beds[Math.round((y / T + 0.5) * 6)];
+    const onX = Math.abs(u) > 0.999, onZ = Math.abs(v) > 0.999, ang = Math.atan2(v, u);
+    const k = 1 + jut + 0.04 * Math.sin(ang * 5 + p1) + 0.025 * Math.sin(ang * 13 + p2); // each bed breaks off at its own line
+    const taper = 1 - 0.22 * Math.abs(u) ** 4 + 0.05 * Math.sin(u * 4 + 1);
+    if (onX) x *= 1 + (k - 1) * 0.5;
+    z = z * taper * (onZ ? k : 1) + 0.03 * Math.sin(u * 2.2 + 0.5) * D;
+    if (y > 0) y += 0.012 * Math.sin(x * 5.1 + 1) * Math.cos(z * 6.3) - 0.09 * Math.max(0, Math.abs(u) - 0.8);
+    p.setXYZ(i, x, y, z);
+  }
+  g.computeVertexNormals(); return new THREE.Mesh(g, mats);
 }
-// night uplights
+const sandstone = (g, w, h, beds) => {
+  g.fillStyle = '#7f372e'; g.fillRect(0, 0, w, h);
+  blotches(g, w, h, 80, ['#6f2c26', '#a34a3c', '#7c342c', '#b06a5a'], 30, 160, 0.4);
+  if (beds) { for (let i = 0; i < 90; i++) { g.globalAlpha = 0.1 + R() * 0.2; g.fillStyle = R() < 0.6 ? '#4a1c18' : '#a4574a'; g.fillRect(R() * w * 0.6 - w * 0.1, R() * h, w * (0.2 + R() * 0.6), 1 + R() * 4); } g.strokeStyle = '#3a1512'; for (let i = 0; i < 30; i++) { g.globalAlpha = 0.3 + R() * 0.3; g.lineWidth = 1 + R() * 2; const x = R() * w, y = R() * h; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (R() - 0.5) * 30, y + 20 + R() * 90); g.stroke(); } }
+  else blotches(g, w, h, 50, ['#c9a79c', '#b89088', '#d8c0b6'], 30, 150, 0.35); // dust and bird lime on top
+  g.globalAlpha = 1; speckle(g, w, h, 9000, ['#5a2420', '#b9776a', '#d2a79c', '#742f29'], 0.4, 1.6, 0.15, 0.5);
+};
+const sandSide = std({ map: canvasTex(1024, 512, (g, w, h) => sandstone(g, w, h, true)), roughness: 0.9, flatShading: true });
+const sandTop = std({ map: canvasTex(1024, 512, (g, w, h) => sandstone(g, w, h, false)), roughness: 0.95 });
+const sandstoneMats = [sandSide, sandSide, sandTop, sandSide, sandSide, sandSide];
+const quartzMat = std({ map: canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = '#b4bcae'; g.fillRect(0, 0, w, h);
+  blotches(g, w, h, 60, ['#98a898', '#d6d9cc', '#8c9c8e', '#aab4a2'], 20, 120, 0.5);
+  g.strokeStyle = 'rgba(120,140,128,0.5)';
+  for (let i = 0; i < 40; i++) { g.lineWidth = 0.5 + R() * 2; g.beginPath(); let x = R() * w, y = R() * h; g.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (R() - 0.5) * 160; y += (R() - 0.5) * 160; g.lineTo(x, y); } g.stroke(); }
+  speckle(g, w, h, 5000, ['#ffffff', '#9aa89c', '#e6e2d6'], 0.4, 1.4, 0.2, 0.6);
+}), color: 0xe6e0d2, roughness: 0.95, flatShading: true });
+function boulder(sx, sy, sz, mat, seed) { // angular quarried block: a wedge with one long sloping face and knocked corners
+  const g = new THREE.BoxGeometry(sx, sy, sz, 3, 2, 2), p = g.attributes.position, r = rnd(seed), seen = new Map();
+  for (let i = 0; i < p.count; i++) {
+    const key = [p.getX(i), p.getY(i), p.getZ(i)].map(v => v.toFixed(3)).join();
+    if (!seen.has(key)) seen.set(key, [(r() - 0.5) * 0.16 * sx, (r() - 0.5) * 0.18 * sy, (r() - 0.5) * 0.2 * sz]);
+    const [dx, dy, dz] = seen.get(key), x = p.getX(i), y = p.getY(i), top = y > 0 ? 1 : y < 0 ? 0 : 0.5;
+    p.setXYZ(i, x + dx * (0.4 + top), y < 0 ? y : y * (0.35 + 0.65 * (x / sx + 0.5)) + dy, (p.getZ(i) + dz) * (1 - 0.3 * top)); // top slopes down to one end
+  }
+  g.computeVertexNormals(); return new THREE.Mesh(g, mat);
+}
+{ // on the cipher side: a long red sandstone slab across the front of the pool and a pale quartz block at its left end
+  const red = add(strataSlab(3.3, 0.44, 1.05, sandstoneMats, 7), { parent: kryptos }); red.position.set(0.25, 0.22, 1.72); red.rotation.y = 0.06;
+  const q = add(boulder(1.45, 0.72, 0.85, quartzMat, 11), { parent: kryptos }); q.position.set(-1.75, 0.34, 1.25); q.rotation.y = 0.5;
+  for (const [lx, lz, r] of [[-0.9, 1.75, 0.6], [0.25, 1.75, 0.6], [1.4, 1.75, 0.6], [-1.75, 1.25, 0.7]]) { const [x, z] = W(lx, lz); colliders.circles.push({ x, z, r }); }
+}
+// night uplights set in the paving
 const uplights = [];
-for (const [x, z] of [[-1.4, 1.8], [-0.8, 2.4], [3.2, 2.0]]) {
+for (const [x, z] of [[-3.3, 0.5], [1.95, 1.2], [-0.4, -2.5]]) {
   const sl = new THREE.SpotLight(0xfff0d0, 0, 14, 0.75, 0.6, 1.5);
-  sl.position.set(x, 0.15, z); sl.target.position.set(x * 0.3, 2.2, z * 0.1);
+  sl.position.set(x, 0.1, z); sl.target.position.set(x * 0.5 - 0.3, 2.0, z * 0.3 - 0.4);
   kryptos.add(sl, sl.target); uplights.push(sl);
-  add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.1, 12), std({ color: 0x222222, metalness: 0.7, roughness: 0.4 })), { parent: kryptos }).position.set(x, 0.05, z);
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.02, 12), std({ color: 0x3a3630, metalness: 0.7, roughness: 0.4 })), { parent: kryptos, cast: false }).position.set(x, 0.01, z);
 }
 
-// Bubbling whirlpool, held in the front bay of the S
-const WHIRL = { lx: 1.3, lz: 0.25, r: 0.7 };
+// The pool the tableau plates wrap: dark water inside a flush granite coping, a dark drain slot around it, then two
+// rings of paving cut to the circle before the square grid takes over.
+const POOL = { r: 0.8, cope: 1.22, slot: 1.3, rings: 2.6 };
 {
-  const grp = new THREE.Group(); grp.position.set(WHIRL.lx, 0, WHIRL.lz); kryptos.add(grp);
-  // a round basin flush with the paving, with a dark stone rim
-  const lip = add(new THREE.Mesh(new THREE.RingGeometry(WHIRL.r, WHIRL.r + 0.18, 48), std({ color: 0x3a3a3a, roughness: 0.4 })), { cast: false, parent: grp });
-  lip.rotation.x = -Math.PI / 2; lip.position.y = 0.11;
-  const g = new THREE.RingGeometry(0.02, WHIRL.r, 64, 16), p = g.attributes.position, uv = g.attributes.uv;
-  for (let i = 0; i < p.count; i++) { const r = Math.hypot(p.getX(i), p.getY(i)); p.setZ(i, -0.14 * Math.exp(-r * 4)); uv.setXY(i, p.getX(i) / (2 * WHIRL.r) + 0.5, p.getY(i) / (2 * WHIRL.r) + 0.5); }
+  const flat = g => g.rotateX(-Math.PI / 2);
+  const dark = std({ color: 0x141614, roughness: 0.6 });
+  const g = new THREE.RingGeometry(0.02, POOL.r, 64, 16), p = g.attributes.position, uv = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) { const r = Math.hypot(p.getX(i), p.getY(i)); p.setZ(i, -0.05 * Math.exp(-r * 5)); uv.setXY(i, p.getX(i) / (2 * POOL.r) + 0.5, p.getY(i) / (2 * POOL.r) + 0.5); }
   g.computeVertexNormals();
-  const water = add(new THREE.Mesh(g, std({ color: 0x1b2a2a, roughness: 0.04, metalness: 0.2, normalMap: whirlNormal, normalScale: new THREE.Vector2(1.2, 1.2), transparent: true, opacity: 0.92 })), { cast: false, parent: grp });
-  water.rotation.x = -Math.PI / 2; water.position.y = 0.105;
-  const [x, z] = W(WHIRL.lx, WHIRL.lz); colliders.circles.push({ x, z, r: WHIRL.r + 0.15 });
+  const water = add(new THREE.Mesh(g, std({ color: 0x0c1716, roughness: 0.03, metalness: 0.3, normalMap: whirlNormal, normalScale: new THREE.Vector2(0.25, 0.25), envMapIntensity: 0.6 })), { cast: false, parent: kryptos });
+  water.rotation.x = -Math.PI / 2; water.position.y = -0.1;
+  const copeMat = std({ map: graniteFlamed, roughness: 0.55 });
+  add(new THREE.Mesh(flat(new THREE.RingGeometry(POOL.r, POOL.cope, 72, 1)), copeMat), { cast: false, parent: kryptos }).position.y = 0.012;
+  for (const [r, side] of [[POOL.r, THREE.BackSide], [POOL.cope, THREE.FrontSide]]) // coping walls into the water and the slot
+    add(new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.14, 72, 1, true), std({ map: graniteFlamed, color: 0x8a8a88, roughness: 0.6, side })), { cast: false, parent: kryptos }).position.y = -0.058;
+  add(new THREE.Mesh(flat(new THREE.RingGeometry(POOL.cope, POOL.slot, 72, 1)), dark), { cast: false, parent: kryptos }).position.y = -0.03;
+  add(new THREE.Mesh(new THREE.CylinderGeometry(POOL.slot, POOL.slot, 0.04, 72, 1, true), std({ color: 0x141614, roughness: 0.6, side: THREE.BackSide })), { cast: false, parent: kryptos }).position.y = -0.012;
+  // ring pavers with open joints over a dark bed
+  add(new THREE.Mesh(flat(new THREE.RingGeometry(POOL.slot, POOL.rings, 72, 1)), std({ color: 0x4a4744, roughness: 0.9 })), { cast: false, parent: kryptos }).position.y = -0.006;
+  const pos = [], uvs = [], col = [], idx = [], J = 0.004, ringW = (POOL.rings - POOL.slot) / 2;
+  for (let ring = 0; ring < 2; ring++) {
+    const r0 = POOL.slot + ring * ringW + J, r1 = POOL.slot + (ring + 1) * ringW - J, n = Math.round(Math.PI * (r0 + r1) / 0.95), off = ring * 0.37;
+    for (let k = 0; k < n; k++) {
+      const a0 = (k + off) / n * 2 * Math.PI + J / r0, a1 = (k + 1 + off) / n * 2 * Math.PI - J / r0, seg = 6, tone = 0.88 + R() * 0.2, b = pos.length / 3;
+      for (let s = 0; s <= seg; s++) {
+        const a = a0 + (a1 - a0) * s / seg, c = Math.cos(a), sn = Math.sin(a);
+        pos.push(r0 * c, 0, r0 * sn, r1 * c, 0, r1 * sn); uvs.push(r0 * c, r0 * sn, r1 * c, r1 * sn); col.push(tone, tone, tone, tone, tone, tone);
+        if (s < seg) idx.push(b + s * 2, b + s * 2 + 1, b + s * 2 + 2, b + s * 2 + 1, b + s * 2 + 3, b + s * 2 + 2);
+      }
+    }
+  }
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); pg.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); pg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  pg.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => i % 3 === 1 ? 1 : 0), 3)); pg.setIndex(idx);
+  add(new THREE.Mesh(pg, std({ map: graniteFlamed, vertexColors: true, roughness: 0.75, side: THREE.DoubleSide })), { cast: false, parent: kryptos });
+  const [x, z] = W(0, 0); colliders.circles.push({ x, z, r: POOL.r + 0.05 });
 }
-
 // ---------- Morse code ----------
 const MORSE = { A: '.-', B: '-...', C: '-.-.', D: '-..', E: '.', F: '..-.', G: '--.', H: '....', I: '..', J: '.---', K: '-.-', L: '.-..', M: '--', N: '-.', O: '---', P: '.--.', Q: '--.-', R: '.-.', S: '...', T: '-', U: '..-', V: '...-', W: '.--', X: '-..-', Y: '-.--', Z: '--..' };
 // K0, as read facing south (Wikipedia's transcription of the copper sheets)
 const K0 = ['E E VIRTUALLY E', 'E E E E E E INVISIBLE', 'DIGETAL E E E', 'INTERPRETATIT', 'E E SHADOW E E', 'FORCES E E E E E', 'LUCID E E E', 'MEMORY E', 'T IS YOUR', 'POSITION E', 'SOS', 'RQ'];
 // Two lines of Morse per exposed window of the copper seam.
-function morseTex(lines) {
-  return canvasTex(2048, 512, (g, w, h) => {
-    copperBase(g, w, h, 0.4);
-    g.fillStyle = 'rgba(90,150,120,0.35)'; g.fillRect(0, 0, w, h); // "green copper plate"
+function morseTex(lines, span = 3.3) {
+  return canvasTex(2048, 1024, (g, w, h) => { // texture spans 3.3 x 1.3 m of sheet; dots are ~12 mm holes, dashes ~45 mm slots
+    copperBase(g, w, h, 0.5);
+    g.fillStyle = 'rgba(150,185,172,0.55)'; g.fillRect(0, 0, w, h); // sheet copper weathers paler and flatter than the screen
+    blotches(g, w, h, 30, ['#6f6a5a', '#8a7f6a'], 40, 160, 0.3);
+    const u = w / span; // px per metre
     g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000';
     lines.forEach((msg, li) => {
-      let x = 70; const y = h * (0.3 + 0.4 * li);
+      let x = 0.25 * u; const y = h * 0.5 + (li - (lines.length - 1) / 2) * 0.065 * u, r = 0.006 * u;
       for (const word of msg.split(' ')) {
         for (const c of word) {
           for (const q of MORSE[c]) {
-            if (q === '.') { g.beginPath(); g.arc(x + 12, y, 12, 0, 7); g.fill(); x += 40; }
-            else { g.beginPath(); g.roundRect(x, y - 12, 64, 24, 12); g.fill(); x += 80; }
+            if (q === '.') { g.beginPath(); g.arc(x + r, y, r, 0, 7); g.fill(); x += 0.03 * u; }
+            else { g.beginPath(); g.roundRect(x, y - r, 0.045 * u, 2 * r, r); g.fill(); x += 0.063 * u; }
           }
-          x += 36;
+          x += 0.03 * u;
         }
-        x += 56;
+        x += 0.05 * u;
       }
     });
     g.globalCompositeOperation = 'source-over';
@@ -661,138 +931,265 @@ function morseTex(lines) {
 const WALK_A = [-124.5, 65.1], WALK_B = [-77.5, 51.7]; // OSM way 126784272: last stretch from the parking deck to the NHB entrance
 const WD = [(WALK_B[0] - WALK_A[0]) / 48.87, (WALK_B[1] - WALK_A[1]) / 48.87], WN = [-WD[1], WD[0]];
 const along = (s, off) => [WALK_A[0] + WD[0] * s + WN[0] * off, WALK_A[1] + WD[1] * s + WN[1] * off];
-const FAC_DIR = [0.266, 0.964]; // NHB west facade line (edge of the OSM entrance building); also the lawn's straight edge
-const FAC_RY = Math.atan2(FAC_DIR[0], FAC_DIR[1]); // group local +z runs along the facade, toward the south
-const CROSS = along(30, 0), ENT_LEN = 45.7, ENT_W = 3.66, SLAB_T = 0.305, GAP = 1.7;
+// The entrance stones are three separate groups, as an early-2000s aerial with young trees shows (Elonka Dunin's
+// Walkway image) and a recent leaf-off aerial confirms: the Morse slab complex on the walk's north edge, a plain dark
+// block in the lawn south of the walk, and the compass slab with its lodestone wall nearer the forecourt. They lie
+// roughly on one line; FAC_DIR is that line.
+const FAC_DIR = [0.783, 0.622];
+const FAC_RY = Math.atan2(FAC_DIR[0], FAC_DIR[1]); // group local +z runs along the outcrop, toward the south-east
+const CROSS = [-93.3, 56.2], SLAB_T = 0.305;
 const copperEdge = std({ color: 0x4f7a64, metalness: 0.5, roughness: 0.55 });
 const entGraniteMat = std({ map: graniteGrey, color: 0xd8c8c0, roughness: 0.35 });
-{
-  // segment the outcrop; on the north side of the walkway, every other segment opens a window onto the copper
-  const segs = [];
-  for (let t = -ENT_LEN / 2; t < ENT_LEN / 2 - 0.5;) {
-    let len = Math.min(2.4 + R() * 1.6, ENT_LEN / 2 - t);
-    if (t < -GAP && t + len > -GAP) len = -GAP - t;
-    if (t >= -GAP && t < GAP) { t = GAP; continue; }
-    segs.push({ t, len }); t += len;
+{ // The Morse slab complex, about 6 x 5 m (Gillogly's photographs; footprint from the aerials): courses of rough
+  // granite tilted up away from the walk with copper sheet between them and polished blocks set back on top. The sheet
+  // shows as a broad strip along the walk side, in a trough behind the top block and as narrow strips at the sides.
+  // Which phrases share a sheet was read off the close-ups; the code is cut to read from the uphill side.
+  const big = new THREE.Group(), bx = -100, bz = 53.4;
+  big.position.set(bx, H(bx, bz) + 0.12, bz); big.rotation.set(0.17, -0.28, 0, 'YXZ'); scene.add(big);
+  // Layout within the complex follows the overview photograph: copper shows as a strip along the walk ending in a wedge
+  // at the grass (DIGETAL, with a sheet joint beside it), as a long trough up the west side between an outer kerb and the
+  // stepped blocks (the two sheets photographed with a granite band in front and blocks behind), and in gaps at the back.
+  slab(6.4, SLAB_T, 5.6, entGraniteMat, 0, 0.05, -0.8, 0, 0.07, big);
+  add(new THREE.Mesh(new THREE.BoxGeometry(6.5, 0.012, 5.9), copperEdge), { parent: big }).position.set(0, 0.21, -0.6);
+  for (const [k, n, span, x, z, ry] of [
+    [0, 2, 2.6, -0.6, 1.5, Math.PI], [2, 2, 2.6, 1.95, 1.5, Math.PI], // by the walk: VIRTUALLY/INVISIBLE, then DIGETAL/INTERPRETATIT at the grass edge
+    [4, 2, 2.6, -2.55, -0.2, Math.PI / 2], [6, 2, 2.0, -2.55, -2.6, Math.PI / 2], // west trough: SHADOW/FORCES, LUCID/MEMORY in the corner
+    [10, 1, 1.0, 0.2, -3.0, Math.PI], [11, 1, 1.0, 2.2, -3.0, Math.PI], // SOS and RQ strips in gaps at the back
+  ]) {
+    const tex = morseTex(K0.slice(k, k + n), span); tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    const face = std({ map: tex, alphaTest: 0.5, metalness: 0.1, roughness: 0.8 });
+    const plate = add(new THREE.Mesh(new THREE.BoxGeometry(span, 0.013, span / 2), [copperEdge, copperEdge, face, face, copperEdge, copperEdge]), { parent: big });
+    plate.position.set(x, 0.223, z); plate.rotation.y = ry;
   }
-  const north = segs.filter(sg => sg.t + sg.len <= -GAP).reverse(); // nearest the walkway first
-  north.forEach((sg, i) => { if (i % 2 === 0 && i / 2 < 6) sg.lines = K0.slice(i, i + 2); });
-  for (const sg of segs) {
-    const mid = sg.t + sg.len / 2, cx = CROSS[0] + FAC_DIR[0] * mid, cz = CROSS[1] + FAC_DIR[1] * mid;
-    const grp = new THREE.Group(); grp.position.set(cx, H(cx, cz) - 0.35, cz); grp.rotation.set(0, FAC_RY + (R() - 0.5) * 0.03, 0, 'YXZ'); scene.add(grp);
-    grp.rotation.z = (sg.lines ? 0.12 : 0.28) * (R() < 0.5 ? -1 : 1); // pages jutting from the earth
-    const w = ENT_W - R() * 0.3, L = sg.len - 0.05;
-    for (let k = 0; k < 2; k++) slab(w - k * 0.1, SLAB_T, L - k * 0.05, entGraniteMat, (R() - 0.5) * 0.08, SLAB_T * (k + 0.5), 0, 0, 0.05, grp);
-    const seamY = 2 * SLAB_T + 0.006;
-    add(new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, 0.012, L + 0.04), copperEdge), { parent: grp }).position.y = seamY;
-    const win = sg.lines ? 1.3 : 0; // exposed window length along the outcrop
-    if (sg.lines) {
-      const tex = morseTex(sg.lines); tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      const face = std({ map: tex, alphaTest: 0.5, metalness: 0.5, roughness: 0.5 });
-      const plate = add(new THREE.Mesh(new THREE.BoxGeometry(w - 0.3, 0.013, win), [copperEdge, copperEdge, face, face, copperEdge, copperEdge]), { parent: grp });
-      plate.position.y = seamY + 0.002; plate.rotation.y = Math.PI; // reads left to right facing south
-    }
-    // top layer, split around the window
-    const half = L / 2, pieces = win ? [[-half, -win / 2], [win / 2, half]] : [[-half, half]];
-    for (const [a, b] of pieces) if (b - a > 0.2) slab(w - 0.2, SLAB_T, b - a, entGraniteMat, (R() - 0.5) * 0.08, seamY + 0.012 + SLAB_T / 2, (a + b) / 2, 0, 0.05, grp);
-    for (let z = -half + 0.9; z < half; z += 1.6) { const wx = cx + FAC_DIR[0] * z, wz = cz + FAC_DIR[1] * z; colliders.circles.push({ x: wx, z: wz, r: 1.8 }); }
-  }
+  slab(4.6, SLAB_T, 2.9, entGraniteMat, 0.6, 0.38, -0.9, 0.03, 0.07, big);
+  slab(2.4, SLAB_T, 1.3, entGraniteMat, -0.3, 0.69, -1.3, -0.08, 0.06, big);
+  slab(0.45, SLAB_T, 5.4, entGraniteMat, -3.4, 0.3, -0.8, 0.01, 0.05, big); // outer kerb of the west trough
+  for (const x of [-0.75, 1.2, 3.0]) slab(0.8, SLAB_T, 1.0, entGraniteMat, x, 0.38, -3.0, 0, 0.06, big); // blocks between the back strips
+  for (const dz of [-1.8, 1]) for (const dx of [-1.6, 0, 1.6]) colliders.circles.push({ x: bx + dx * Math.cos(0.28) + dz * Math.sin(0.28), z: bz + dx * Math.sin(0.28) - dz * Math.cos(0.28) - 1, r: 1.9 });
 }
-// Compass rose engraved on a slab south of the walkway near the entrance. Its "N" points about 220° (Elonka Dunin's
-// report), at a lodestone beside it.
-const ROSE = along(40, 5), ROSE_NORTH = 220;
-const LODE = [ROSE[0] + 1.8 * Math.sin(ROSE_NORTH * D2R), ROSE[1] - 1.8 * Math.cos(ROSE_NORTH * D2R)];
+// Compass rose: thin lines engraved in a large dark polished slab lying flush in the lawn south of the walkway, cut
+// in several pieces. Letters sit in small squares on the circle and a long double-line needle crosses the centre toward
+// a lodestone, which rests in a gap of a low two-course granite wall with a copper seam. The rose's "N" points about
+// 220° (Elonka Dunin's report). Spot from pale shapes in leaf-off aerial imagery; photographs fix the arrangement.
+const ROSE = [-81.8, 63.3], ROSE_NORTH = 220, LODE_BRG = 62; // slab visible in both aerials
+const LODE = [ROSE[0] + 2.5 * Math.sin(LODE_BRG * D2R), ROSE[1] - 2.5 * Math.cos(LODE_BRG * D2R)];
 {
-  const roseTex = canvasTex(1024, 1024, (g, w, h) => {
-    g.fillStyle = '#3e3d3b'; g.fillRect(0, 0, w, h);
-    speckle(g, w, h, 20000, ['#2a2928', '#55534f', '#6a6762'], 0.5, 2, 0.2, 0.6);
-    g.translate(w / 2, h / 2); g.rotate(ROSE_NORTH * D2R);
-    g.strokeStyle = 'rgba(190,186,176,0.75)'; g.lineWidth = 3;
-    g.beginPath(); g.arc(0, 0, 380, 0, 7); g.stroke();
-    g.beginPath(); g.moveTo(-470, 0); g.lineTo(470, 0); g.moveTo(0, -470); g.lineTo(0, 470); g.stroke();
-    g.beginPath(); g.moveTo(-10, 330); g.lineTo(-4, -470); g.moveTo(10, 330); g.lineTo(4, -470); g.stroke(); // long double-line needle
-    g.font = 'bold 48px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    for (const [t, x, y] of [['N', 0, -380], ['E', 380, 0], ['S', 0, 380], ['W', -380, 0]]) {
-      g.fillStyle = '#3e3d3b'; g.fillRect(x - 30, y - 30, 60, 60); g.strokeRect(x - 30, y - 30, 60, 60);
-      g.fillStyle = 'rgba(200,196,186,0.9)'; g.fillText(t, x, y + 2);
+  const roseTex = canvasTex(2048, 2048, (g, w, h) => { // 4.4 m square of slab
+    g.fillStyle = '#47474a'; g.fillRect(0, 0, w, h);
+    blotches(g, w, h, 40, ['#3a3a3e', '#55555a'], 60, 300, 0.3);
+    speckle(g, w, h, 60000, ['#2c2c30', '#606066', '#77777c'], 0.5, 1.8, 0.2, 0.6);
+    g.strokeStyle = '#1c1c1e'; g.lineWidth = 7; // joints between the pieces
+    for (const [x0, y0, x1, y1] of [[0.18, 0, 0.3, 1], [0.3, 0.62, 1, 0.7]]) { g.beginPath(); g.moveTo(x0 * w, y0 * h); g.lineTo(x1 * w, y1 * h); g.stroke(); }
+    g.translate(w / 2, h / 2);
+    const R0 = 0.31 * w, cut = 'rgba(22,22,24,0.9)';
+    g.save(); g.rotate(ROSE_NORTH * D2R);
+    g.strokeStyle = cut; g.lineWidth = 3;
+    g.beginPath(); g.arc(0, 0, R0, 0, 7); g.stroke();
+    g.beginPath(); g.moveTo(-R0 * 1.45, 0); g.lineTo(R0 * 1.45, 0); g.moveTo(0, -R0 * 1.45); g.lineTo(0, R0 * 1.45); g.stroke();
+    g.font = 'bold 44px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (const [t, x, y] of [['N', 0, -R0], ['E', R0, 0], ['S', 0, R0], ['W', -R0, 0]]) {
+      g.fillStyle = '#47474a'; g.fillRect(x - 30, y - 30, 60, 60); g.strokeRect(x - 30, y - 30, 60, 60);
+      g.fillStyle = cut; g.fillText(t, x, y + 2);
     }
+    g.restore();
+    g.rotate(LODE_BRG * D2R); g.strokeStyle = cut; g.lineWidth = 2.5; // needle: two fine lines converging on the lodestone
+    g.beginPath(); g.moveTo(-9, R0 * 0.75); g.lineTo(-2, -R0 * 1.3); g.moveTo(9, R0 * 0.75); g.lineTo(2, -R0 * 1.3); g.stroke();
   });
-  const ry = H(...ROSE);
-  const darkStone = std({ color: 0x3e3d3b, roughness: 0.3 });
-  const disc = add(new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.3, 2.6), [darkStone, darkStone, std({ map: roseTex, roughness: 0.25 }), darkStone, darkStone, darkStone]));
-  disc.position.set(ROSE[0], ry + 0.02, ROSE[1]); disc.rotation.x = 0.05;
-  const lode = add(rock(0.42, std({ color: 0x4a4744, roughness: 0.8, metalness: 0.3 })));
-  lode.position.set(LODE[0], H(...LODE) + 0.25, LODE[1]);
-  colliders.circles.push({ x: ROSE[0], z: ROSE[1], r: 1.4 }, { x: LODE[0], z: LODE[1], r: 0.5 });
+  const ry = H(...ROSE), darkStone = std({ color: 0x47474a, roughness: 0.35 });
+  const disc = add(new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.2, 4.4), [darkStone, darkStone, std({ map: roseTex, roughness: 0.3 }), darkStone, darkStone, darkStone]), { cast: false });
+  disc.position.set(ROSE[0], ry - 0.04, ROSE[1]);
+  // the low wall: two courses of rough granite with the copper seam between, broken where the lodestone sits
+  const wall = new THREE.Group(); wall.position.set(LODE[0], H(...LODE), LODE[1]); wall.rotation.y = -Math.atan2(FAC_DIR[1], FAC_DIR[0]); scene.add(wall); // the wall is the south-east end of the outcrop
+  for (const [x, len] of [[-2.6, 3.2], [2.4, 2.8]]) {
+    slab(len, SLAB_T, 0.75, entGraniteMat, x, SLAB_T / 2 - 0.05, 0, 0, 0.06, wall);
+    add(new THREE.Mesh(new THREE.BoxGeometry(len + 0.05, 0.012, 0.8), copperEdge), { parent: wall }).position.set(x, SLAB_T - 0.045, 0);
+    slab(len - 0.2, SLAB_T, 0.7, entGraniteMat, x + 0.05, SLAB_T * 1.5 - 0.035, 0, 0, 0.06, wall);
+  }
+  { // the copper sheet the lodestone rests on carries T IS YOUR / POSITION (decoded from Gillogly's photograph of it)
+    const tex = morseTex(K0.slice(8, 10), 2.0); tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    const face = std({ map: tex, alphaTest: 0.5, metalness: 0.1, roughness: 0.8 });
+    slab(2.1, SLAB_T, 1.8, entGraniteMat, 0, SLAB_T / 2 - 0.05, 0.1, 0, 0.05, wall);
+    add(new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.012, 1.7), copperEdge), { parent: wall }).position.set(0, SLAB_T - 0.045, 0.1);
+    add(new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.013, 1.0), [copperEdge, copperEdge, face, face, copperEdge, copperEdge]), { parent: wall }).position.set(0, SLAB_T - 0.04, 0.45); // the code runs past the stone's side
+  }
+  const lode = add(rock(0.5, std({ color: 0x5c4a40, roughness: 0.8, metalness: 0.3 }), 0.75), { parent: wall }); // rust-brown, as photographed lode.position.set(0.1, SLAB_T + 0.22, -0.4);
+  colliders.circles.push({ x: LODE[0], z: LODE[1], r: 0.6 });
+  for (const dx of [-3, -1.6, 1.6, 3]) colliders.circles.push({ x: LODE[0] + dx * FAC_DIR[0], z: LODE[1] + dx * FAC_DIR[1], r: 0.6 });
+}
+// Plain block: a dark four-sided slab lying flush in the lawn outside the building, scored with a few parallel lines
+const TRI = { x: -90.6, z: 60.9 }; // small pale patch visible in both aerials
+{
+  const sh = new THREE.Shape([new THREE.Vector2(0.1, 1.7), new THREE.Vector2(1.9, -1.0), new THREE.Vector2(-1.7, -0.85), new THREE.Vector2(-1.1, 0.75)]);
+  const tex = canvasTex(512, 512, (g, w, h) => {
+    g.fillStyle = '#3d3f43'; g.fillRect(0, 0, w, h); speckle(g, w, h, 9000, ['#2a2c30', '#55585e', '#6a6d72'], 0.5, 1.6, 0.2, 0.6);
+    g.strokeStyle = 'rgba(20,20,22,0.7)'; g.lineWidth = 1.5; for (const y of [0.3, 0.36, 0.5]) { g.beginPath(); g.moveTo(0, y * h); g.lineTo(w, y * h + 12); g.stroke(); }
+  }, { repeat: [1 / 3.6, 1 / 3.6] });
+  const g = new THREE.ExtrudeGeometry(sh, { depth: 0.06, bevelEnabled: false }).rotateX(-Math.PI / 2);
+  const m = add(new THREE.Mesh(g, std({ map: tex, roughness: 0.4 })), { cast: false }); m.position.set(TRI.x, H(TRI.x, TRI.z) + 0.02, TRI.z); m.rotation.y = 0.6;
+}
+
+// ---------- Courtyard: terrace, raised planter, tables ----------
+// Layout traced from aerial imagery: the paved terrace runs between the planter wall and the curved west edge of the lawn.
+const WALL_H = 0.46;
+const PLANTER_WALL = PLANTER.o.slice(0, 18);
+{
+  // terrace paving, with a round opening for the pool and its ring pavers
+  const edge = LAWN_POLY.slice(0, 12).reverse();
+  const outline = [...PLANTER_WALL, [24.1, 64.6], [27, 75], [52, 71], [45.8, 61.6], ...edge, [23, -17.9], [3.5, -13.3], [4.5, -9.7]];
+  const sh = toShape(outline); sh.holes.push(new THREE.Path().absarc(KX, -KZ, 2.6, 0, Math.PI * 2, true));
+  add(new THREE.Mesh(drape(new THREE.ShapeGeometry(sh, 24).rotateX(-Math.PI / 2), PAVE_Y - 0.002, 3), paverMat), { cast: false });
+
+  // raised planter: soil and ground cover behind a low concrete wall
+  const coverTex = canvasTex(512, 512, (g, w, h) => {
+    g.fillStyle = '#2a3520'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 9000; i++) { // strap leaves
+      const x = R() * w, y = R() * h, a = R() * 6.3, l = 6 + R() * 14;
+      g.strokeStyle = ['#34502a', '#46662f', '#253a1e', '#587a3a', '#3b4a26'][(R() * 5) | 0]; g.globalAlpha = 0.5 + R() * 0.5; g.lineWidth = 1 + R() * 1.5;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+    }
+    g.globalAlpha = 1;
+  }, { repeat: [1 / 1.5, 1 / 1.5] });
+  add(new THREE.Mesh(drape(new THREE.ShapeGeometry(toShape(PLANTER.o)).rotateX(-Math.PI / 2), WALL_H - 0.05, 4), std({ map: coverTex, roughness: 0.95 })), { cast: false });
+  const wallGeo = [];
+  for (let i = 0; i < PLANTER_WALL.length - 1; i++) {
+    const [ax, az] = PLANTER_WALL[i], [bx, bz] = PLANTER_WALL[i + 1], len = Math.hypot(bx - ax, bz - az);
+    wallGeo.push(new THREE.BoxGeometry(len + 0.3, WALL_H + 0.3, 0.3).rotateY(-Math.atan2(bz - az, bx - ax)).translate((ax + bx) / 2, WALL_H / 2 - 0.15 + PAVE_Y, (az + bz) / 2));
+  }
+  add(new THREE.Mesh(mergeGeometries(wallGeo), std({ color: 0xd9d4c8, roughness: 0.85 })));
+  colliders.polys.push({ o: PLANTER.o, box: PLANTER.o.reduce((b, [x, z]) => [Math.min(b[0], x), Math.max(b[1], x), Math.min(b[2], z), Math.max(b[3], z)], [1e9, -1e9, 1e9, -1e9]) });
+  // low evergreen shrubs in the bed
+  const pts = [];
+  for (let i = 0; i < 2600 && pts.length < 520; i++) { const x = -20 + R() * 40, z = -9 + R() * 80; if (inPoly(x, z, PLANTER.o)) pts.push([x, z]); }
+  const shrubs = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), std({ color: 0xffffff, roughness: 0.95, flatShading: true }), pts.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), c = new THREE.Color();
+  pts.forEach(([x, z], i) => {
+    const r = 0.35 + R() * 0.45;
+    m.compose(new THREE.Vector3(x, WALL_H + r * 0.35, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * 6), new THREE.Vector3(r * 1.2, r * 0.75, r * 1.2)); shrubs.setMatrixAt(i, m);
+    shrubs.setColorAt(i, c.set(['#2f4a26', '#3d5a2c', '#27401f', '#4a6632'][(R() * 4) | 0]));
+  });
+  add(shrubs);
+  // trees: a row in the planter, and a loose grove in pits on the terrace south of the sculpture
+  const x0 = z => -14.7 + 0.28 * (z + 4.5);
+  for (let z = 6; z < 58; z += 6.5) SITE.push({ k: 'tree', p: [x0(z) + 2.1 + (R() - 0.5) * 0.6, z + (R() - 0.5)], ht: 7 + R() * 2, cr: 2.4, keep: true, locust: true });
+  for (const p of [[-9, -3.6], [-5.6, -5.4], [-11.6, -0.6], [-7.4, 0.4]]) SITE.push({ k: 'tree', p, ht: 7.5 + R() * 2, cr: 2.5, keep: true, locust: true });
+  const pits = [[5.7, -10], [-5, 6.5], [-1.5, 7.2], [1, 10.5], [-3.5, 11.5], [-0.5, 15.5], [-2.8, 18.4], [0.5, 21], [-1, 25.5], [2.2, 27], [0.8, 32], [3.5, 35], [3, 40.5], [6, 43.2], [5.6, 49.5], [9, 51.5]];
+  const pitGeo = [];
+  for (const p of pits) {
+    SITE.push({ k: 'tree', p, ht: 6.5 + R() * 2.5, cr: 2.3, keep: true, locust: true });
+    pitGeo.push(new THREE.PlaneGeometry(1.3, 1.3).rotateX(-Math.PI / 2).rotateY(0.28).translate(p[0], PAVE_Y + 0.004, p[1]));
+  }
+  add(new THREE.Mesh(mergeGeometries(pitGeo), std({ map: mulchTex, roughness: 1 })), { cast: false });
+  // a second red slab resting on the planter wall beside the sculpture, and a concrete litter bin
+  const red2 = add(strataSlab(1.9, 0.3, 0.95, sandstoneMats, 23)); red2.position.set(-1.75, PAVE_Y + WALL_H + 0.16, -3.75); red2.rotation.y = 0.35;
+  add(new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.95, 0.62), std({ color: 0xcfcac0, roughness: 0.9 }))).position.set(4.6, PAVE_Y + 0.475, -7.9);
+  colliders.circles.push({ x: 4.6, z: -7.9, r: 0.5 });
+}
+// Picnic tables on the terrace: red steel tables with a bench each side, as in the CIA's recent courtyard photographs
+// (1999 photographs show dark round tables on concrete pads at the same spots).
+{
+  const red = std({ color: 0x7c2430, metalness: 0.3, roughness: 0.55 });
+  const parts = [new THREE.BoxGeometry(1.85, 0.05, 0.78).translate(0, 0.75, 0)];
+  for (const sz of [-1, 1]) {
+    parts.push(new THREE.BoxGeometry(1.85, 0.05, 0.28).translate(0, 0.45, sz * 0.72));
+    for (const sx of [-0.7, 0.7]) parts.push(new THREE.BoxGeometry(0.05, 0.9, 0.05).rotateX(-sz * 0.5).translate(sx, 0.38, sz * 0.36), new THREE.BoxGeometry(0.05, 0.05, 1.5).translate(sx, 0.42, 0));
+  }
+  const geo = mergeGeometries(parts.map(g => { const n = g.toNonIndexed(); n.deleteAttribute('uv'); return n; }));
+  const spots = [[0, -7.2], [2.7, -6.4], [4.2, -3.2], [10.4, -13.2], [13.2, -13.2], [10.3, -10.3], [-2.4, 2.9], [3.2, 3.1], [-0.8, 22.1], [-0.6, 28.4], [2.1, 37.6], [5, 46.2]];
+  const tables = new THREE.InstancedMesh(geo, red, spots.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
+  spots.forEach(([x, z], i) => {
+    m.compose(new THREE.Vector3(x, PAVE_Y, z), q.setFromAxisAngle(up, 0.28 + (R() < 0.5 ? 0 : Math.PI / 2) + (R() - 0.5) * 0.2), one); tables.setMatrixAt(i, m);
+    colliders.circles.push({ x, z, r: 1.1 });
+  });
+  add(tables);
 }
 
 // ---------- Courtyard lawn (Sanborn: 60'L x 12'W x 3'H) ----------
 // "A calm, reflective pool of water lies between two layered slabs of granite and tall grasses. Directly across from this
-// is the centerpiece" (CIA). It runs parallel to the entrance outcrop, in Sanborn's semicircular lawn east of the plaza.
-// Placement from aerial imagery: a 7.2 x 2.5 m dark pool centred ~(23.3, 17.3) m with its long axis at ~126° true
-// (pointing back at the screen), and a pale slab footprint at each end ~12 m apart.
-const LAWN = { x: 23.3, z: 17.3, bearing: 126 };
+// is the centerpiece" (CIA). Aerial imagery shows a dark six-sided pool about 6.6 x 4.2 m with a pale tilted slab at each
+// end, the larger to the south-east, on an axis of about 124° true. Photographs show each slab as a polished plane of
+// pink-grey granite sloping up out of the water over stepped courses of rough 12-inch slabs.
+const LAWN = { x: 23.4, z: 18.2, bearing: 124 };
 const LAWN_AXIS = [Math.sin(LAWN.bearing * D2R), -Math.cos(LAWN.bearing * D2R)];
+const grassClumpMat = std({ color: 0xffffff, vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
+const plumeMat = std({ color: 0xcfc4a4, roughness: 1 });
+let plumes = null;
 {
-  const grp = new THREE.Group(); grp.position.set(LAWN.x, H(LAWN.x, LAWN.z), LAWN.z); grp.rotation.y = Math.PI - LAWN.bearing * D2R; scene.add(grp);
-  for (const end of [-1, 1]) for (let k = 0; k < 3; k++) slab(3.66 - k * 0.2, SLAB_T, 4.4 - k * 0.4, entGraniteMat, (R() - 0.5) * 0.1, SLAB_T * (k + 0.5) - 0.05, end * 5.9 + (R() - 0.5) * 0.2, (R() - 0.5) * 0.03, 0.06, grp);
-  add(new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.3, 7.4), entGraniteMat), { parent: grp }).position.set(0, 0.15, 0);
-  const water = add(new THREE.Mesh(new THREE.PlaneGeometry(2.5, 7.2).rotateX(-Math.PI / 2), std({ color: 0x18242a, roughness: 0.02, metalness: 0.3, normalMap: calmNormal, normalScale: new THREE.Vector2(0.3, 0.3) })), { cast: false, parent: grp });
-  water.position.set(0, 0.31, 0);
-  const blade = new THREE.ConeGeometry(0.012, 1, 3); blade.translate(0, 0.5, 0);
-  const n = 1400, grass = new THREE.InstancedMesh(blade, std({ color: 0xc8bc98, roughness: 0.9 }), n), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
-  for (let i = 0; i < n; i++) {
-    e.set((R() - 0.5) * 0.5, R() * 6, (R() - 0.5) * 0.5); q.setFromEuler(e);
-    const side = R() < 0.5 ? -1 : 1; // tall grasses along both long sides of the pool
-    m.compose(new THREE.Vector3(side * (1.6 + R() * 0.8), 0, (Math.floor(R() * 9) - 4) * 0.8 + (R() - 0.5) * 0.4), q, new THREE.Vector3(1.4, 1.2 + R() * 0.7, 1.4)); grass.setMatrixAt(i, m);
-  }
-  add(grass, { parent: grp });
-  for (let z = -7.8; z <= 7.8; z += 1.56) colliders.circles.push({ x: LAWN.x + LAWN_AXIS[0] * z, z: LAWN.z + LAWN_AXIS[1] * z, r: 1.9 });
-}
-// Bird pond with opposing wooden benches, in the semicircular lawn (exact spot unpublished)
-const PONDP = { x: 9, z: 28 };
-const koi = [];
-{
-  const grp = new THREE.Group(); grp.position.set(PONDP.x, H(PONDP.x, PONDP.z), PONDP.z); scene.add(grp);
-  add(new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.4, 0.35, 40), graniteGreyMat), { parent: grp }).position.y = 0.175;
-  const w = add(new THREE.Mesh(new THREE.CircleGeometry(2.05, 40).rotateX(-Math.PI / 2), std({ color: 0x1c2a22, roughness: 0.05, metalness: 0.15, normalMap: calmNormal, transparent: true, opacity: 0.85 })), { cast: false, parent: grp });
-  w.position.y = 0.36;
-  const koiMat = std({ color: 0xd8642a, roughness: 0.5 }), koiGeo = new THREE.SphereGeometry(0.09, 10, 6).scale(1, 0.4, 2.4);
-  for (let i = 0; i < 6; i++) { const k = add(new THREE.Mesh(koiGeo, koiMat), { cast: false, parent: grp }); k.userData = { r: 0.5 + R() * 1.2, a: R() * 6, s: 0.2 + R() * 0.3 }; koi.push(k); }
-  const wood = std({ color: 0x6b5a45, roughness: 0.8 });
-  for (const sd of [-1, 1]) {
-    add(new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.08, 0.5), wood), { parent: grp }).position.set(0, 0.45, sd * 3.4);
-    for (const o of [-0.8, 0.8]) add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.45, 0.45), wood), { parent: grp }).position.set(o, 0.22, sd * 3.4);
-  }
-  colliders.circles.push({ x: PONDP.x, z: PONDP.z, r: 2.5 });
-}
-// Triangular black stone slab (exact spot unpublished)
-const TRI = { x: 14, z: 24 };
-{
-  const sh = new THREE.Shape([new THREE.Vector2(0, 1.6), new THREE.Vector2(1.1, -0.6), new THREE.Vector2(-1.1, -0.6)]);
-  const g = new THREE.ExtrudeGeometry(sh, { depth: 0.25, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02 }).rotateX(-Math.PI / 2);
-  add(new THREE.Mesh(g, std({ color: 0x141414, roughness: 0.15, metalness: 0.1 }))).position.set(TRI.x, H(TRI.x, TRI.z) + 0.02, TRI.z);
-  colliders.circles.push({ x: TRI.x, z: TRI.z, r: 1.0 });
-}
-// Freestanding lunch tables on the plaza outside the cafeteria windows (visible in the aerial photo)
-{
-  const metal = std({ color: 0x2e3133, metalness: 0.5, roughness: 0.5 });
-  const arc = new THREE.Shape(); arc.absarc(0, 0, 1.25, -0.8, 0.8, false); arc.absarc(0, 0, 0.95, 0.8, -0.8, true);
-  const benchGeo = new THREE.ExtrudeGeometry(arc, { depth: 0.05, bevelEnabled: false }).rotateX(-Math.PI / 2);
-  const onGrass = (x, z) => SITE.some(f => (f.k === 'grass' || f.k === 'flowerbed') && inPoly(x, z, f.o));
-  const inBldg = (x, z) => colliders.polys.some(b => inPoly(x, z, b.o) || b.o.some(([bx, bz]) => Math.hypot(bx - x, bz - z) < 2));
-  let placed = 0;
-  for (let z = -16; z <= 2 && placed < 12; z += 3.6) for (let x = 2; x <= 30 && placed < 12; x += 3.6) {
-    const tx = x + (R() - 0.5), tz = z + (R() - 0.5);
-    if (Math.hypot(tx, tz) < 6.5 || onGrass(tx, tz) || inBldg(tx, tz)) continue;
-    const gy = H(tx, tz);
-    add(new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.04, 28), metal)).position.set(tx, gy + 0.74, tz);
-    add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.72, 8), metal)).position.set(tx, gy + 0.36, tz);
-    const rot = R() * 6;
-    for (let k = 0; k < 3; k++) {
-      const seat = add(new THREE.Mesh(benchGeo, metal)); seat.position.set(tx, gy + 0.45, tz); seat.rotation.y = rot + k * 2 * Math.PI / 3;
+  const grp = new THREE.Group(); grp.position.set(LAWN.x, H(LAWN.x, LAWN.z) + 0.045, LAWN.z); grp.rotation.y = Math.PI - LAWN.bearing * D2R; scene.add(grp);
+  const toWorld = (lx, lz) => { const v = new THREE.Vector3(lx, 0, lz).applyAxisAngle(new THREE.Vector3(0, 1, 0), grp.rotation.y); return [LAWN.x + v.x, LAWN.z + v.z]; };
+  const pink = (g, w, h) => {
+    g.fillStyle = '#b39c95'; g.fillRect(0, 0, w, h);
+    blotches(g, w, h, 50, ['#9f847e', '#c3aaa2', '#8f7a78'], 30, 140, 0.3);
+    speckle(g, w, h, w * h * 0.06, ['#4a3a38', '#d9c4bc', '#f0e2da', '#6c5450', '#2a2222', '#b8857a'], 0.5, 2.4, 0.3, 0.9);
+  };
+  const pinkTex = canvasTex(512, 512, pink);
+  const rough = std({ map: pinkTex, roughness: 0.9 }), polished = std({ map: pinkTex, color: 0xb08a84, roughness: 0.32, envMapIntensity: 0.6 });
+  const mats6 = [rough, rough, polished, rough, rough, rough];
+  const pool = [[-1.2, -3.3], [1.2, -3.3], [2.1, 0], [1.2, 3.3], [-1.2, 3.3], [-2.1, 0]];
+  const flatShape = pts => new THREE.ShapeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)))).rotateX(-Math.PI / 2);
+  add(new THREE.Mesh(flatShape(pool.map(([x, z]) => [x * 1.03, z * 1.015])), std({ color: 0x2b2d2e, metalness: 0.5, roughness: 0.6 })), { cast: false, parent: grp }).position.y = 0.035; // dark steel edging
+  add(new THREE.Mesh(flatShape(pool), std({ color: 0x0d1614, roughness: 0.02, metalness: 0.35, normalMap: calmNormal, normalScale: new THREE.Vector2(0.15, 0.15), envMapIntensity: 1.2 })), { cast: false, parent: grp }).position.y = 0.045;
+  // each end: three courses stepping back, all tilted up away from the water
+  // Photographs show both groups dipping the same way, like one tilted bed cut through by the pool: the south-east
+  // group slopes down into the water, and the north-west group stands highest at the water and sinks into the lawn.
+  for (const [dir, len, wid, tilt] of [[1, 5.4, 4.6, 0.19], [-1, 5.0, 3.2, 0.17]]) {
+    const tg = new THREE.Group(); tg.position.set(0, dir > 0 ? -0.02 : len * Math.sin(tilt) + 0.05, dir * 3.25); tg.rotation.x = -tilt; grp.add(tg);
+    for (let k = 0; k < 4; k++) { // four courses, each shorter and shifted sideways, so the high end shows stepped, staggered beds
+      const L = len - k * len * 0.22, sx = k ? (k % 2 ? 0.28 : -0.22) + (R() - 0.5) * 0.15 : 0;
+      const s = slab(wid - k * 0.18 + (R() - 0.5) * 0.2, 0.3, L, mats6, sx, -0.15 - k * 0.3, dir * (len - L / 2 + k * 0.1), (R() - 0.5) * 0.05, 0.08, tg);
+      if (k) s.material = rough;
     }
-    colliders.circles.push({ x: tx, z: tz, r: 1.3 }); placed++;
+    for (const [x, ry] of [[-wid * 0.18, 0.3], [wid * 0.2, -0.22]]) { // the polished top is three pieces with raking joints
+      const j = add(new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.006, len * 0.98), std({ color: 0x2a2424, roughness: 0.9 })), { parent: tg, cast: false });
+      j.position.set(x, 0.002, dir * len / 2); j.rotation.y = ry;
+    }
+    for (let d = 1; d < len; d += 1.5) { const [x, z] = toWorld(0, dir * (3.25 + d)); colliders.circles.push({ x, z, r: wid / 2 }); }
+  }
+  for (let d = -2.4; d <= 2.4; d += 1.6) { const [x, z] = toWorld(0, d); colliders.circles.push({ x, z, r: 1.7 }); }
+
+  // ornamental grass: one clump of arching blades, instanced
+  const pos = [], col = [], idx = [], base = new THREE.Color(), tip = new THREE.Color(), cc = new THREE.Color();
+  for (let b = 0; b < 150; b++) {
+    const a = R() * Math.PI * 2, lean = 0.12 + R() * R() * 0.9, hgt = 0.6 + R() * 0.5, wd = 0.009, ca = Math.cos(a), sa = Math.sin(a), r0 = R() * 0.12;
+    base.set('#5d6a3a'); tip.set(R() < 0.5 ? '#b7b07a' : '#8f9a58');
+    const v0 = pos.length / 3;
+    for (let s = 0; s <= 4; s++) {
+      const t = s / 4, out = r0 + lean * t * t * hgt, y = hgt * (t - 0.25 * lean * t * t), w = wd * (1 - t * 0.85);
+      pos.push(ca * out - sa * w, y, sa * out + ca * w, ca * out + sa * w, y, sa * out - ca * w);
+      cc.copy(base).lerp(tip, t); col.push(cc.r, cc.g, cc.b, cc.r, cc.g, cc.b);
+      if (s < 4) idx.push(v0 + s * 2, v0 + s * 2 + 1, v0 + s * 2 + 2, v0 + s * 2 + 1, v0 + s * 2 + 3, v0 + s * 2 + 2);
+    }
+  }
+  const clump = new THREE.BufferGeometry();
+  clump.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); clump.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); clump.setIndex(idx); clump.computeVertexNormals();
+  // feathery seed heads standing above the leaves
+  const plumeGeo = mergeGeometries(Array.from({ length: 16 }, () => { const a = R() * 6.3, l = 0.1 + R() * 0.45; return new THREE.ConeGeometry(0.008, 0.26, 4).translate(0, 0.15, 0).rotateZ(l).rotateY(a).translate(Math.cos(a) * -l * 0.8, 0.9 + R() * 0.2, Math.sin(a) * l * 0.8); }));
+  const spots = [];
+  const bed = (cx, cz, rx, rz, n) => { for (let i = 0; i < n; i++) { const a = R() * 6.3, r = Math.sqrt(R()); spots.push([cx + Math.cos(a) * r * rx, cz + Math.sin(a) * r * rz]); } };
+  // the stones stand in open lawn; the grass beds lie well to either side, each with a bench at its edge (CIA photographs)
+  bed(-10.5, 2, 3.2, 6.5, 44); bed(10, -1, 2.8, 5.5, 34); bed(-9, 11.5, 4, 3.5, 26);
+  const clumps = new THREE.InstancedMesh(clump, grassClumpMat, spots.length);
+  plumes = new THREE.InstancedMesh(plumeGeo, plumeMat, spots.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  spots.forEach(([x, z], i) => {
+    const s = 1.1 + R() * 0.8;
+    m.compose(new THREE.Vector3(x, 0, z), q.setFromAxisAngle(up, R() * 6.3), new THREE.Vector3(s, s, s)); clumps.setMatrixAt(i, m); plumes.setMatrixAt(i, m);
+  });
+  add(clumps, { parent: grp }); add(plumes, { parent: grp, recv: false });
+  { // tall reeds standing in the north-west end of the pool
+    const reeds = new THREE.InstancedMesh(clump, std({ color: 0x9fd060, vertexColors: true, roughness: 0.9, side: THREE.DoubleSide }), 7);
+    for (let i = 0; i < 7; i++) { const s2 = 1.5 + R() * 0.5; m.compose(new THREE.Vector3((R() - 0.5) * 1.6, 0.03, -2.2 - R() * 0.9), q.setFromAxisAngle(up, R() * 6.3), new THREE.Vector3(s2 * 0.7, s2, s2 * 0.7)); reeds.setMatrixAt(i, m); }
+    add(reeds, { parent: grp });
+  }
+
+  // opposing teak garden benches across the pool
+  const teak = std({ color: 0x8a7a66, roughness: 0.85 });
+  const bench = [new THREE.BoxGeometry(1.6, 0.04, 0.48).translate(0, 0.43, 0), new THREE.BoxGeometry(1.6, 0.36, 0.04).rotateX(-0.2).translate(0, 0.68, -0.27)];
+  for (const x of [-0.78, 0.78]) bench.push(new THREE.BoxGeometry(0.06, 0.62, 0.06).translate(x, 0.31, 0.2), new THREE.BoxGeometry(0.06, 0.9, 0.06).translate(x, 0.45, -0.26), new THREE.BoxGeometry(0.06, 0.05, 0.52).translate(x, 0.62, -0.02));
+  const benchGeo = mergeGeometries(bench);
+  for (const sd of [-1, 1]) {
+    const b = add(new THREE.Mesh(benchGeo, teak), { parent: grp }); b.position.set(sd * 6.6, 0, 1.2 * sd); b.rotation.y = -sd * Math.PI / 2;
+    const [x, z] = toWorld(sd * 6.6, 1.2 * sd); colliders.circles.push({ x, z, r: 0.8 });
   }
 }
 // K2 coordinate point: a brass survey disk flush with the ground
@@ -811,13 +1208,13 @@ const [K2X, K2Z] = geoToXZ(K2_LAT, K2_LON);
 // ---------- Trees: mapped individual trees + woodland fill (seasonal) ----------
 const trunkGeo = new THREE.CylinderGeometry(0.12, 0.22, 1, 7); trunkGeo.translate(0, 0.5, 0);
 const crownGeo = (() => {
-  const g = new THREE.IcosahedronGeometry(1, 3), p = g.attributes.position, v = new THREE.Vector3();
+  const g = new THREE.IcosahedronGeometry(1, 2), p = g.attributes.position, v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); v.multiplyScalar(1 + 0.16 * Math.sin(v.x * 6 + v.y * 4) * Math.cos(v.z * 5)); p.setXYZ(i, v.x, v.y * 0.9, v.z); }
   g.computeVertexNormals(); return g;
 })();
 const coneGeo = new THREE.ConeGeometry(1, 2.2, 9); coneGeo.translate(0, 0.6, 0);
 const treeSpots = [];
-for (const f of SITE.filter(f => f.k === 'tree')) treeSpots.push({ x: f.p[0], z: f.p[1], h: f.ht || 8 + R() * 5, r: 2.4 + R() * 1.4, needle: f.lt === 'n', mapped: true });
+for (const f of SITE.filter(f => f.k === 'tree')) treeSpots.push({ x: f.p[0], z: f.p[1], h: f.ht || 8 + R() * 5, r: f.cr || 2.4 + R() * 1.4, needle: f.lt === 'n', mapped: true, keep: f.keep, locust: f.locust, y: f.keep && inPoly(f.p[0], f.p[1], PLANTER.o) ? WALL_H : 0 });
 for (const f of SITE.filter(f => f.k === 'wood')) { // woodland: sample trees inside the polygon
   const [x0, x1, z0, z1] = f.o.reduce((b, [x, z]) => [Math.min(b[0], x), Math.max(b[1], x), Math.min(b[2], z), Math.max(b[3], z)], [1e9, -1e9, 1e9, -1e9]);
   const n = Math.min(400, ((x1 - x0) * (z1 - z0)) / 45);
@@ -832,44 +1229,72 @@ for (let i = 0; i < 1400; i++) { // horizon woods beyond the mapped area
 }
 { // keep trees off the stonework, pools and tables
   const solid = colliders.circles.slice();
-  for (let i = treeSpots.length - 1; i >= 0; i--) { const t = treeSpots[i]; if (Math.hypot(t.x, t.z) < 300 && (solid.some(c => Math.hypot(c.x - t.x, c.z - t.z) < c.r + 0.8) || colliders.polys.some(b => inPoly(t.x, t.z, b.o)))) treeSpots.splice(i, 1); }
+  for (let i = treeSpots.length - 1; i >= 0; i--) { const t = treeSpots[i]; if (!t.keep && Math.hypot(t.x, t.z) < 300 && (solid.some(c => Math.hypot(c.x - t.x, c.z - t.z) < c.r + 0.8) || colliders.polys.some(b => inPoly(t.x, t.z, b.o)))) treeSpots.splice(i, 1); }
 }
 const trunkMat = std({ map: barkTex, roughness: 0.95 });
-const crownMat = std({ map: leafTex, roughness: 0.85 });
+const crownMat = std({ map: leafTex, roughness: 0.9, alphaTest: 0.5, side: THREE.DoubleSide });
 const needleMat = std({ color: 0x2f4a2c, roughness: 0.9 });
 const broad = treeSpots.filter(t => !t.needle), conifers = treeSpots.filter(t => t.needle);
+// Each broadleaf near the courtyard gets a scaffold of limbs and a crown of several leaf masses; distant ones one mass.
+const limbGeo = (() => {
+  const parts = [], r = rnd(77);
+  for (let i = 0; i < 9; i++) {
+    const a = i * 2.4 + r(), tilt = 0.35 + r() * 0.5, len = 0.55 + r() * 0.35;
+    parts.push(new THREE.CylinderGeometry(0.006, 0.018, len, 5).translate(0, len / 2, 0).rotateZ(tilt).rotateY(a).translate(0, 0.45 + r() * 0.2, 0));
+    for (let k = 0; k < 3; k++) { // twigs
+      const l2 = 0.25 + r() * 0.2, g = new THREE.CylinderGeometry(0.002, 0.006, l2, 4).translate(0, l2 / 2, 0).rotateZ(tilt + (r() - 0.5) * 1.2).rotateY(a + (r() - 0.5) * 1.6);
+      const d = (0.5 + r() * 0.5) * len; parts.push(g.translate(-Math.sin(tilt) * Math.cos(a) * d, 0.5 + Math.cos(tilt) * d, Math.sin(tilt) * Math.sin(a) * d));
+    }
+  }
+  return mergeGeometries(parts);
+})();
+const lobes = [];
+for (const t of broad) {
+  const near = Math.hypot(t.x, t.z) < 170, gy = H(t.x, t.z) + (t.y || 0), cy = gy + t.h * 0.55 + t.r * 0.6;
+  if (!near) { lobes.push({ t, x: t.x, y: cy, z: t.z, r: t.r, c: R() }); continue; }
+  const n = t.locust ? 11 : 9, tone = R();
+  for (let k = 0; k < n; k++) {
+    const a = k * 2.4 + R(), d = k ? t.r * (0.35 + R() * 0.6) : 0, s = t.r * (k ? 0.38 + R() * 0.24 : 0.62);
+    lobes.push({ t, x: t.x + Math.cos(a) * d, y: cy + (k ? (R() - 0.45) * t.r * 0.9 : t.r * 0.2), z: t.z + Math.sin(a) * d, r: s, c: (tone + (R() - 0.5) * 0.25 + 1) % 1 });
+  }
+}
+const nearBroad = broad.filter(t => Math.hypot(t.x, t.z) < 170);
 const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeSpots.length);
-const crowns = new THREE.InstancedMesh(crownGeo, crownMat, broad.length);
+const limbs = new THREE.InstancedMesh(limbGeo, trunkMat, nearBroad.length);
+const crowns = new THREE.InstancedMesh(crownGeo, crownMat, lobes.length);
 const cones = new THREE.InstancedMesh(coneGeo, needleMat, conifers.length);
-const crownBase = [];
 {
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), v = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   treeSpots.forEach((t, i) => {
-    const th = t.needle ? t.h * 0.3 : t.h * 0.55;
-    m.compose(v.set(t.x, H(t.x, t.z) - 0.1, t.z), q.identity(), s.set(t.h / 18 + 0.6, th, t.h / 18 + 0.6)); trunks.setMatrixAt(i, m);
-    if (t.mapped && Math.hypot(t.x, t.z) < 250) colliders.circles.push({ x: t.x, z: t.z, r: 0.35 });
+    const th = t.needle ? t.h * 0.3 : t.h * 0.6, w = (t.h / 18 + 0.6) * (t.locust ? 0.7 : 1);
+    m.compose(v.set(t.x, H(t.x, t.z) + (t.y || 0) - 0.1, t.z), q.identity(), s.set(w, th, w)); trunks.setMatrixAt(i, m);
+    if (t.mapped && Math.hypot(t.x, t.z) < 250) colliders.circles.push({ x: t.x, z: t.z, r: 0.3 });
   });
-  broad.forEach((t, i) => { q.setFromAxisAngle(up, R() * 6); m.compose(v.set(t.x, H(t.x, t.z) + t.h * 0.55 + t.r * 0.7, t.z), q, s.set(t.r, t.r * 1.1, t.r)); crowns.setMatrixAt(i, m); crownBase.push(R()); });
-  conifers.forEach((t, i) => { m.compose(v.set(t.x, H(t.x, t.z) + t.h * 0.3, t.z), q.identity(), s.set(t.r * 0.7, t.h * 0.35, t.r * 0.7)); cones.setMatrixAt(i, m); });
+  nearBroad.forEach((t, i) => { const k = t.r * 1.9; m.compose(v.set(t.x, H(t.x, t.z) + (t.y || 0) + t.h * 0.6 - k * 0.5, t.z), q.setFromAxisAngle(up, R() * 6), s.set(k, k, k)); limbs.setMatrixAt(i, m); });
+  lobes.forEach((l, i) => { q.setFromAxisAngle(up, R() * 6); m.compose(v.set(l.x, l.y, l.z), q, s.set(l.r, l.r * 0.85, l.r)); crowns.setMatrixAt(i, m); });
+  conifers.forEach((t, i) => { const blue = Math.hypot(t.x - 19.9, t.z - 6) < 1; m.compose(v.set(t.x, H(t.x, t.z) + (blue ? 0.3 : t.h * 0.3), t.z), q.identity(), blue ? s.set(1.9, 2.6, 1.9) : s.set(t.r * 0.7, t.h * 0.35, t.r * 0.7)); cones.setMatrixAt(i, m); });
 }
-add(trunks); add(crowns); add(cones);
+add(trunks); add(limbs); add(crowns); add(cones);
 let lastSeason = -1;
 function applySeason(month) {
   if (month === lastSeason) return; lastSeason = month;
   const bare = month === 11 || month <= 2, c = new THREE.Color();
   const pal = month <= 4 ? ['#7fae4a', '#94bf5a', '#6a9a3e'] : month <= 8 ? ['#4f7a2e', '#3f6a26', '#5c8634'] : ['#c4622a', '#d8962e', '#9e3a22', '#b8a03a', '#6f7a2e'];
+  const locust = month <= 4 ? ['#a4c85a', '#b5d26a'] : month <= 8 ? ['#6f9a3a', '#7fa844'] : ['#d9b23a', '#e2c04a', '#c9a02e']; // honey locusts turn clear yellow
   crowns.visible = !bare;
-  broad.forEach((_, i) => { c.set(pal[Math.floor(crownBase[i] * pal.length)]); crowns.setColorAt(i, c); });
+  lobes.forEach((l, i) => { const p = l.t.locust ? locust : pal; c.set(p[Math.floor(l.c * p.length)]); crowns.setColorAt(i, c); });
   if (crowns.instanceColor) crowns.instanceColor.needsUpdate = true;
   const gcol = bare ? '#a39a6e' : month >= 9 ? '#c9c79a' : '#ffffff';
   grassMat.color.set(gcol); mats.wood.color.set(bare ? '#7a6a50' : '#8a9a70');
+  // ornamental grasses: green in summer, straw with seed heads from late summer through winter
+  grassClumpMat.color.set(month >= 4 && month <= 7 ? '#8fb060' : month >= 8 && month <= 9 ? '#d8d2a0' : '#e6d2a4');
+  if (plumes) plumes.visible = month >= 7 || month <= 2;
 }
-
 // ---------- Lamps ----------
 const lamps = [];
 const lampHeadMat = std({ color: 0x222222, emissive: 0xffd9a0, emissiveIntensity: 0 });
 const poleMat = std({ color: 0x2c2c2c, metalness: 0.6, roughness: 0.5 });
-for (const [lx, lz] of [[-7, -6], [8, 9], [-10, 10], along(10, 2.2), along(22, -2.2), along(40, 2.2), [16, 30]]) {
+for (const [lx, lz] of [[9.8, 0.7], [6.8, -8.6], [-3.4, 9.4], [1.6, 24], [5.8, 38.4], [20.5, 47], along(10, 2.2), along(22, -2.2), along(40, 2.2)]) {
   const gy = H(lx, lz);
   add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 4, 8), poleMat)).position.set(lx, gy + 2, lz);
   add(new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), lampHeadMat)).position.set(lx, gy + 4.1, lz);
@@ -892,7 +1317,6 @@ const stars = (() => {
 })();
 const sunDir = new THREE.Vector3();
 const lastEnvDir = new THREE.Vector3(9, 9, 9); let lastEnvTime = 0;
-const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 function applySun(alt, az, force) {
   sunDir.set(Math.cos(alt) * Math.sin(az), Math.sin(alt), -Math.cos(alt) * Math.cos(az));
   for (const s of [sky, envSky]) s.material.uniforms.sunPosition.value.copy(sunDir);
@@ -901,7 +1325,7 @@ function applySun(alt, az, force) {
   sun.intensity = 3.2 * day;
   hemi.intensity = 0.12 + 0.44 * smooth(-0.15, 0.3, sa);
   hemi.color.setRGB(0.55 + 0.2 * day, 0.65 + 0.15 * day, 1);
-  renderer.toneMappingExposure = 0.5 + 0.5 * night;
+  renderer.toneMappingExposure = 0.7 + 0.4 * night;
   scene.fog.color.setRGB(0.05 + 0.67 * day, 0.06 + 0.71 * day, 0.09 + 0.71 * day);
   stars.material.opacity = night;
   for (const m of Object.values(facadeMats)) m.emissiveIntensity = 0.9 * night;
@@ -956,10 +1380,10 @@ function advanceTime(dt) {
 }
 
 // ---------- Points of interest ----------
-const [TREE_X, TREE_Z] = W(-2.95, 0.05), [WH_X, WH_Z] = W(WHIRL.lx, WHIRL.lz);
-const front = (dist, side = 0) => W(side, dist);
+const [TREE_X, TREE_Z] = W(LOG.x, LOG.z), [WH_X, WH_Z] = W(0, 0), [SCX, SCZ] = W(-0.9, -0.3);
+const front = (dist, side = 0) => W(side - 0.9, dist);
 const POIS = [
-  { name: 'Kryptos', x: 0, z: 0, r: 6, view: [...front(8, 0.3)], html: `<h2>Kryptos (1990)</h2>Jim Sanborn's S-shaped copper screen, "a piece of paper coming out of a computer printer", 20 ft long, 10 ft wide and 12 ft high by Sanborn's figures, stands on the concrete plaza against a tall petrified tree in the northwest corner of the New Headquarters Building courtyard, outside the cafeteria. From the courtyard the tree is on the left. A long rough red slab and a large white quartz boulder lie in front of it. The copper has weathered to a blue-green patina. The left half carries K1 to K4: 869 characters in 28 rows, with Y, A and R in superscript at the start of the lower half. The right half is the KRYPTOS Vigenère tableau, cut mirror-image so it reads only from the back, with the extra L that spells HILL down the last column.
+  { name: 'Kryptos', x: SCX, z: SCZ, r: 6, view: [...front(8, 0.3)], html: `<h2>Kryptos (1990)</h2>Jim Sanborn's copper screen, "a piece of paper coming out of a computer printer", stands on the paved terrace at the north-west corner of the New Headquarters Building courtyard, about 3 m high and 6.2 m along its S-shaped plan. The cipher plates leave a tall petrified tree, run toward you, turn and cross to the seam; the tableau plates then wrap the back of a round pool. A long red sandstone slab and a pale quartz block lie in front, and a second red slab rests on the planter wall behind. The cipher side faces east across the lawn; the tableau reads from the building side. The left pair of plates carries K1 to K4: 869 characters in 28 rows, with Y, A and R raised at the start of the lower plate. The right pair is the KRYPTOS Vigenère tableau, cut mirror-image, with the extra L that spells HILL down the last column.
   <details><summary>K1 to K3 solutions (spoilers)</summary>
   <p><b>K1</b> (Vigenère, key PALIMPSEST): BETWEEN SUBTLE SHADING AND THE ABSENCE OF LIGHT LIES THE NUANCE OF IQLUSION</p>
   <p><b>K2</b> (Vigenère, key ABSCISSA): IT WAS TOTALLY INVISIBLE ... THIRTY EIGHT DEGREES FIFTY SEVEN MINUTES SIX POINT FIVE SECONDS NORTH SEVENTY SEVEN DEGREES EIGHT MINUTES FORTY FOUR SECONDS WEST ... LAYER TWO. The sculpture omits an S near the end of K2, as Sanborn confirmed in 2006.</p>
@@ -967,11 +1391,10 @@ const POIS = [
   <p><b>K4</b> (97 characters) has no published solution. Sanborn's clues: positions 26-34 NORTHEAST, 22-25 EAST, 64-69 BERLIN, 70-74 CLOCK.</p>
   <p class="mono">${K4}</p></details>` },
   { name: 'Petrified tree', x: TREE_X, z: TREE_Z, r: 2.2, html: `<h2>Petrified tree</h2>Per the CIA, the tree "symbolizes the trees that once stood on the site of the sculpture and that were the source of materials on which written language has been recorded." White quartz lies at the base.` },
-  { name: 'Whirlpool', x: WH_X, z: WH_Z, r: 2.4, view: [...front(5, 2.6)], html: `<h2>Bubbling pool</h2>The screen curls around a turbulent pool. In the CIA's words it "symbolizes information being disseminated with the destination being unknown."` },
-  { name: 'Calm pool', x: LAWN.x, z: LAWN.z, r: 10, view: [LAWN.x - LAWN_AXIS[0] * 13, LAWN.z - LAWN_AXIS[1] * 13], html: `<h2>Courtyard lawn</h2>Sanborn's second section, 60 ft long by 12 ft wide by 3 ft high: "a calm, reflective pool of water lies between two layered slabs of granite and tall grasses" (CIA), directly across from the screen. Its position and its 126° axis, which points back at the screen, are measured from aerial imagery. Sanborn called the lawn "a peaceful contemplative hidden space with the sound and image of water ... a place to escape from, or ponder, difficult decisions."` },
-  { name: 'Bird pond', x: PONDP.x, z: PONDP.z, r: 4.5, html: `<h2>Bird pond</h2>The semicircular lawn also holds a bird (fish) pond with opposing wooden benches, and nearby a triangular black stone slab. Both are documented as being in the lawn, but their exact spots are not published.` },
-  { name: 'Morse stones', x: CROSS[0], z: CROSS[1], r: 26, view: [...along(22, -0.5)], viewAt: CROSS, html: `<h2>K0: Entrance outcrop</h2>Sanborn's first section: a 150 ft granite outcrop of 12-inch slabs running parallel to the New Headquarters Building facade, with the walkway from the parking deck passing through it. A seam of green copper runs between two layers. Where it is exposed, north of the walkway, it is perforated with International Morse. Facing south, it reads:<p class="mono">${K0.join('<br>')}</p>South of the walkway near the entrance, a compass rose engraved in granite points its north (about 220°) at a lodestone. Walk your compass (bottom right) up to the dark boulder and watch the needle swing.<p class="src">Walkway, entrance and facade line from OpenStreetMap. The order of the Morse windows and the rose's spot along the walkway are not published.</p>` },
-  { name: 'K2 point', x: K2X, z: K2Z, r: 3, view: [K2X - 3, K2Z - 3], html: `<h2>K2's coordinates</h2>38°57'6.5"N, 77°8'44"W. K2: "It's buried out there somewhere." The point lies ${Math.round(Math.hypot(K2X, K2Z))} m from the sculpture, bearing ${Math.round((Math.atan2(K2X, -K2Z) / D2R + 360) % 360)}°. The brass disk marks it.` },
+  { name: 'Whirlpool', x: WH_X, z: WH_Z, r: 2.4, view: [...front(4.6, 2.4)], viewAt: [WH_X, WH_Z], html: `<h2>Bubbling pool</h2>The screen curls around a turbulent pool. In the CIA's words it "symbolizes information being disseminated with the destination being unknown."` },
+  { name: 'Calm pool', x: LAWN.x, z: LAWN.z, r: 10, view: [LAWN.x - LAWN_AXIS[0] * 13, LAWN.z - LAWN_AXIS[1] * 13], html: `<h2>Courtyard lawn</h2>Sanborn's second section, 60 ft long by 12 ft wide by 3 ft high: "a calm, reflective pool of water lies between two layered slabs of granite and tall grasses" (CIA), directly across from the screen. Its position, outline and 124° axis are measured from aerial imagery; opposing teak benches face each other across the water. Sanborn called the lawn "a peaceful contemplative hidden space with the sound and image of water ... a place to escape from, or ponder, difficult decisions."` },
+  { name: 'Morse stones', x: CROSS[0], z: CROSS[1], r: 26, view: [-96.5, 58.2], viewAt: [-100, 53.4], html: `<h2>K0: Entrance stones</h2>Sanborn's first section, which he described as a 150 ft outcrop of 12-inch granite slabs with a seam of green copper between two layers, through which the walkway passes. Aerial photographs show three separate groups rather than a continuous ridge: the Morse slab complex on the walk's north edge, a plain dark block in the lawn to the south, and the compass slab with its lodestone wall nearer the entrance. The copper is perforated with International Morse, cut to read from the uphill side:<p class="mono">${K0.join('<br>')}</p>VIRTUALLY / INVISIBLE and DIGETAL / INTERPRETATIT lie on the strip by the walk, the latter at the grass edge; SHADOW / FORCES and LUCID / MEMORY in the trough up the west side; SOS and RQ on narrow strips between blocks; T IS YOUR / POSITION on the sheet the lodestone rests on. The compass rose's north points about 220° and its needle runs to the lodestone. Walk your compass (bottom right) up to the dark boulder and watch the needle swing.<p class="src">Positions from two aerial photographs; sheet pairings read from Jim Gillogly's close-ups. Where each sheet sits within the complex is fitted to those photographs, not surveyed.</p>` },
+  { name: 'K2 point', x: K2X, z: K2Z, r: 3, view: [K2X - 3, K2Z - 3], html: `<h2>K2's coordinates</h2>38°57'6.5"N, 77°8'44"W. K2: "It's buried out there somewhere." The point lies ${Math.round(Math.hypot(K2X, K2Z))} m from the sculpture, bearing ${Math.round((Math.atan2(K2X, -K2Z) / D2R + 360) % 360)}°. Nothing marks the spot on the ground; the brass disk is added in this model.` },
 ];
 const tp = $('tp');
 POIS.filter(p => p.view).forEach(p => {
@@ -984,9 +1407,8 @@ const card = $('card'); let cardPoi = null;
 
 // ---------- Controls ----------
 const player = (([x, z]) => new THREE.Vector3(x, 1.7, z))(front(9, 0.5));
-let yaw = Math.atan2(player.x, player.z), pitch = 0.08;
+let yaw = Math.atan2(player.x - SCX, player.z - SCZ), pitch = 0.06;
 const keys = {};
-const coarse = matchMedia('(pointer: coarse)').matches;
 addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'KeyT' && !['INPUT', 'SELECT'].includes(document.activeElement.tagName)) $('play').click(); });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
@@ -1080,9 +1502,9 @@ addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; cam
 let shCur = SH;
 function placeSun() {
   // near the sculpture, centre a tight box between the screen's own shadow and the player; far away, a wide box on the player
-  const dk = Math.hypot(player.x, player.z), t = smooth(14, 45, dk), sh = 12 + 28 * t;
+  const dk = Math.hypot(player.x - KX, player.z - KZ), t = smooth(14, 45, dk), sh = 12 + 28 * t;
   const hl = Math.hypot(sunDir.x, sunDir.z) || 1, reach = Math.min(9, 1.8 * hl / Math.max(0.05, sunDir.y));
-  const sx = -sunDir.x / hl * reach, sz = -sunDir.z / hl * reach;
+  const sx = KX - sunDir.x / hl * reach, sz = KZ - sunDir.z / hl * reach;
   const fx = (sx + player.x) / 2 * (1 - t) + player.x * t, fz = (sz + player.z) / 2 * (1 - t) + player.z * t;
   if (Math.abs(sh - shCur) > 0.25) {
     shCur = sh; Object.assign(sun.shadow.camera, { left: -sh, right: sh, top: sh, bottom: -sh }); sun.shadow.camera.updateProjectionMatrix();
@@ -1116,7 +1538,6 @@ function step(dt) {
   camera.rotation.set(pitch, yaw, 0, 'YXZ');
   whirlNormal.rotation -= dt * 0.9;
   calmNormal.offset.x += dt * 0.004;
-  for (const k of koi) { const u = k.userData; u.a += dt * u.s / u.r; k.position.set(Math.cos(u.a) * u.r, 0.3, Math.sin(u.a) * u.r); k.rotation.y = -u.a; }
   placeSun();
   renderer.render(scene, camera);
   hudT += dt;
