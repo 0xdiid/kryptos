@@ -1126,7 +1126,7 @@ let plumes = null;
     speckle(g, w, h, w * h * 0.06, ['#4a3a38', '#d9c4bc', '#f0e2da', '#6c5450', '#2a2222', '#b8857a'], 0.5, 2.4, 0.3, 0.9);
   };
   const pinkTex = canvasTex(512, 512, pink);
-  const rough = std({ map: pinkTex, roughness: 0.9 }), polished = std({ map: pinkTex, color: 0xb08a84, roughness: 0.32, envMapIntensity: 0.6 });
+  const rough = std({ map: pinkTex, bumpMap: pinkTex, bumpScale: 1.5, roughness: 0.9 }), polished = std({ map: pinkTex, color: 0xb08a84, roughness: 0.32, envMapIntensity: 0.6 });
   const mats6 = [rough, rough, polished, rough, rough, rough];
   const pool = [[-1.3, -3.3], [1.0, -3.3], [2.0, 2.2], [0.6, 3.5], [-1.3, 3.0]]; // straight sides, raked ends (CIA overhead photograph)
   const flatShape = pts => new THREE.ShapeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)))).rotateX(-Math.PI / 2);
@@ -1304,6 +1304,9 @@ for (const [lx, lz] of [[9.8, 0.7], [6.8, -8.6], [-3.4, 9.4], [1.6, 24], [5.8, 3
   const pl = new THREE.PointLight(0xffd9a0, 0, 22, 1.6); pl.position.set(lx, gy + 4.0, lz); scene.add(pl); lamps.push(pl);
   colliders.circles.push({ x: lx, z: lz, r: 0.2 });
 }
+
+// Surface relief: the speckle of each stone texture doubles as a bump map, so grain and joints catch raking light.
+for (const [m, k] of [[entGraniteMat, 1.2], [graniteGreyMat, 1.2], [paverMat, 0.8], [sandSide, 2.5], [sandTop, 1.5], [quartzMat, 2], [mats.pave, 0.6], [mats.park, 0.8], [grassMat, 1.5]]) { m.bumpMap = m.map; m.bumpScale = k; }
 
 // ---------- Sky, stars, environment ----------
 function makeSky() { const s = new Sky(); s.scale.setScalar(10000); const u = s.material.uniforms; u.turbidity.value = 5; u.rayleigh.value = 1.6; u.mieCoefficient.value = 0.004; u.mieDirectionalG.value = 0.8; return s; }
