@@ -971,33 +971,36 @@ const entGraniteMat = std({ map: graniteGrey, color: 0xd8c8c0, roughness: 0.35 }
 // in several pieces. Letters sit in small squares on the circle and a long double-line needle crosses the centre toward
 // a lodestone, which rests in a gap of a low two-course granite wall with a copper seam. The rose's "N" points about
 // 220° (Elonka Dunin's report). Spot from pale shapes in leaf-off aerial imagery; photographs fix the arrangement.
-const ROSE = [-81.8, 63.3], ROSE_NORTH = 220, LODE_BRG = 62; // slab visible in both aerials
+const ROSE = [-81.8, 63.3], ROSE_NORTH = 220, LODE_BRG = 88; // slab visible in both aerials; the needle runs between the rose's S and W (CIA photograph)
 const LODE = [ROSE[0] + 2.5 * Math.sin(LODE_BRG * D2R), ROSE[1] - 2.5 * Math.cos(LODE_BRG * D2R)];
 {
-  const roseTex = canvasTex(2048, 2048, (g, w, h) => { // 4.4 m square of slab
-    g.fillStyle = '#47474a'; g.fillRect(0, 0, w, h);
-    blotches(g, w, h, 40, ['#3a3a3e', '#55555a'], 60, 300, 0.3);
-    speckle(g, w, h, 60000, ['#2c2c30', '#606066', '#77777c'], 0.5, 1.8, 0.2, 0.6);
-    g.strokeStyle = '#1c1c1e'; g.lineWidth = 7; // joints between the pieces
+  const roseTex = canvasTex(2048, 2048, (g, w, h) => { // 4.4 m square of polished brown-pink granite, as in the CIA's photographs
+    g.fillStyle = '#6e5450'; g.fillRect(0, 0, w, h);
+    blotches(g, w, h, 60, ['#5a4440', '#84655e', '#7a5a52', '#4f3c3a'], 60, 300, 0.35);
+    speckle(g, w, h, 70000, ['#3c2e2c', '#9a7a72', '#b89a90', '#584440', '#2a2222'], 0.5, 1.8, 0.2, 0.6);
+    g.strokeStyle = '#2a2020'; g.lineWidth = 6; // joints between the pieces
     for (const [x0, y0, x1, y1] of [[0.18, 0, 0.3, 1], [0.3, 0.62, 1, 0.7]]) { g.beginPath(); g.moveTo(x0 * w, y0 * h); g.lineTo(x1 * w, y1 * h); g.stroke(); }
     g.translate(w / 2, h / 2);
-    const R0 = 0.31 * w, cut = 'rgba(22,22,24,0.9)';
+    const R0 = 0.31 * w, cut = 'rgba(30,22,22,0.9)';
     g.save(); g.rotate(ROSE_NORTH * D2R);
     g.strokeStyle = cut; g.lineWidth = 3;
     g.beginPath(); g.arc(0, 0, R0, 0, 7); g.stroke();
-    g.beginPath(); g.moveTo(-R0 * 1.45, 0); g.lineTo(R0 * 1.45, 0); g.moveTo(0, -R0 * 1.45); g.lineTo(0, R0 * 1.45); g.stroke();
-    g.font = 'bold 44px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    for (const [t, x, y] of [['N', 0, -R0], ['E', R0, 0], ['S', 0, R0], ['W', -R0, 0]]) {
-      g.fillStyle = '#47474a'; g.fillRect(x - 30, y - 30, 60, 60); g.strokeRect(x - 30, y - 30, 60, 60);
-      g.fillStyle = cut; g.fillText(t, x, y + 2);
+    for (let k = 0; k < 8; k++) { // cardinal lines run out past the circle with a gap for the letter; intercardinals stop short inside it
+      g.save(); g.rotate(k * Math.PI / 4); g.beginPath();
+      if (k % 2) { g.moveTo(0, -R0 * 0.2); g.lineTo(0, -R0 * 0.72); } else { g.moveTo(0, -R0 * 0.2); g.lineTo(0, -R0 * 0.88); g.moveTo(0, -R0 * 1.12); g.lineTo(0, -R0 * 1.4); }
+      g.stroke(); g.restore();
     }
+    g.font = 'bold 60px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = cut;
+    ['N', 'E', 'S', 'W'].forEach((t, k) => { g.save(); g.rotate(k * Math.PI / 2); g.fillText(t, 0, -R0); g.restore(); });
     g.restore();
-    g.rotate(LODE_BRG * D2R); g.strokeStyle = cut; g.lineWidth = 2.5; // needle: two fine lines converging on the lodestone
-    g.beginPath(); g.moveTo(-9, R0 * 0.75); g.lineTo(-2, -R0 * 1.3); g.moveTo(9, R0 * 0.75); g.lineTo(2, -R0 * 1.3); g.stroke();
+    g.rotate(LODE_BRG * D2R); // needle: a long pale kite inlaid across the centre, its point toward the lodestone
+    g.fillStyle = 'rgba(190,170,160,0.75)'; g.strokeStyle = cut; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(0, -R0 * 1.05); g.lineTo(R0 * 0.045, -R0 * 0.1); g.lineTo(0, R0 * 0.95); g.lineTo(-R0 * 0.045, -R0 * 0.1); g.closePath(); g.fill(); g.stroke();
   });
-  const ry = H(...ROSE), darkStone = std({ color: 0x47474a, roughness: 0.35 });
-  const disc = add(new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.2, 4.4), [darkStone, darkStone, std({ map: roseTex, roughness: 0.3 }), darkStone, darkStone, darkStone]), { cast: false });
-  disc.position.set(ROSE[0], ry - 0.04, ROSE[1]);
+  const ry = H(...ROSE), darkStone = std({ map: graniteRed, color: 0x9a8a86, roughness: 0.9 });
+  // a thick slab standing proud of the lawn, polished on top, rough split at the sides
+  const disc = add(new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.4, 4.4), [darkStone, darkStone, std({ map: roseTex, roughness: 0.22, envMapIntensity: 0.6 }), darkStone, darkStone, darkStone]));
+  disc.position.set(ROSE[0], ry + 0.1, ROSE[1]);
   // the low wall: two courses of rough granite with the copper seam between, broken where the lodestone sits
   const wall = new THREE.Group(); wall.position.set(LODE[0], H(...LODE), LODE[1]); wall.rotation.y = -Math.atan2(FAC_DIR[1], FAC_DIR[0]); scene.add(wall); // the wall is the south-east end of the outcrop
   for (const [x, len] of [[-2.6, 3.2], [2.4, 2.8]]) {
@@ -1012,7 +1015,7 @@ const LODE = [ROSE[0] + 2.5 * Math.sin(LODE_BRG * D2R), ROSE[1] - 2.5 * Math.cos
     add(new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.012, 1.7), copperEdge), { parent: wall }).position.set(0, SLAB_T - 0.045, 0.1);
     add(new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.013, 1.0), [copperEdge, copperEdge, face, face, copperEdge, copperEdge]), { parent: wall }).position.set(0, SLAB_T - 0.04, 0.45); // the code runs past the stone's side
   }
-  const lode = add(rock(0.5, std({ color: 0x5c4a40, roughness: 0.8, metalness: 0.3 }), 0.75), { parent: wall }); // rust-brown, as photographed lode.position.set(0.1, SLAB_T + 0.22, -0.4);
+  const lode = add(rock(0.48, std({ color: 0x4a403c, roughness: 0.6, metalness: 0.35 }), 0.95), { parent: wall }); // dark, faintly rusty and glossy in photographs lode.position.set(0.1, SLAB_T + 0.36, -0.4);
   colliders.circles.push({ x: LODE[0], z: LODE[1], r: 0.6 });
   for (const dx of [-3, -1.6, 1.6, 3]) colliders.circles.push({ x: LODE[0] + dx * FAC_DIR[0], z: LODE[1] + dx * FAC_DIR[1], r: 0.6 });
 }
@@ -1106,7 +1109,7 @@ const PLANTER_WALL = PLANTER.o.slice(0, 18);
 
 // ---------- Courtyard lawn (Sanborn: 60'L x 12'W x 3'H) ----------
 // "A calm, reflective pool of water lies between two layered slabs of granite and tall grasses. Directly across from this
-// is the centerpiece" (CIA). Aerial imagery shows a dark six-sided pool about 6.6 x 4.2 m with a pale tilted slab at each
+// is the centerpiece" (CIA). Imagery shows a dark steel-edged pool about 6.6 m long with raked ends and a tilted slab at each
 // end, the larger to the south-east, on an axis of about 124° true. Photographs show each slab as a polished plane of
 // pink-grey granite sloping up out of the water over stepped courses of rough 12-inch slabs.
 const LAWN = { x: 23.4, z: 18.2, bearing: 124 };
@@ -1125,7 +1128,7 @@ let plumes = null;
   const pinkTex = canvasTex(512, 512, pink);
   const rough = std({ map: pinkTex, roughness: 0.9 }), polished = std({ map: pinkTex, color: 0xb08a84, roughness: 0.32, envMapIntensity: 0.6 });
   const mats6 = [rough, rough, polished, rough, rough, rough];
-  const pool = [[-1.2, -3.3], [1.2, -3.3], [2.1, 0], [1.2, 3.3], [-1.2, 3.3], [-2.1, 0]];
+  const pool = [[-1.3, -3.3], [1.0, -3.3], [2.0, 2.2], [0.6, 3.5], [-1.3, 3.0]]; // straight sides, raked ends (CIA overhead photograph)
   const flatShape = pts => new THREE.ShapeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)))).rotateX(-Math.PI / 2);
   add(new THREE.Mesh(flatShape(pool.map(([x, z]) => [x * 1.03, z * 1.015])), std({ color: 0x2b2d2e, metalness: 0.5, roughness: 0.6 })), { cast: false, parent: grp }).position.y = 0.035; // dark steel edging
   add(new THREE.Mesh(flatShape(pool), std({ color: 0x0d1614, roughness: 0.02, metalness: 0.35, normalMap: calmNormal, normalScale: new THREE.Vector2(0.15, 0.15), envMapIntensity: 1.2 })), { cast: false, parent: grp }).position.y = 0.045;
@@ -1139,7 +1142,7 @@ let plumes = null;
       const s = slab(wid - k * 0.18 + (R() - 0.5) * 0.2, 0.3, L, mats6, sx, -0.15 - k * 0.3, dir * (len - L / 2 + k * 0.1), (R() - 0.5) * 0.05, 0.08, tg);
       if (k) s.material = rough;
     }
-    for (const [x, ry] of [[-wid * 0.18, 0.3], [wid * 0.2, -0.22]]) { // the polished top is three pieces with raking joints
+    for (const [x, ry] of [[-wid * 0.25, 0.03], [0, -0.02], [wid * 0.25, 0.04]]) { // the polished top is four long strips side by side
       const j = add(new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.006, len * 0.98), std({ color: 0x2a2424, roughness: 0.9 })), { parent: tg, cast: false });
       j.position.set(x, 0.002, dir * len / 2); j.rotation.y = ry;
     }
