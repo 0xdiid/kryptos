@@ -888,14 +888,14 @@ const POOL = { r: 0.8, cope: 1.22, slot: 1.3, rings: 2.6 };
       for (let s = 0; s <= seg; s++) {
         const a = a0 + (a1 - a0) * s / seg, c = Math.cos(a), sn = Math.sin(a);
         pos.push(r0 * c, 0, r0 * sn, r1 * c, 0, r1 * sn); uvs.push(r0 * c, r0 * sn, r1 * c, r1 * sn); col.push(tone, tone, tone, tone, tone, tone);
-        if (s < seg) idx.push(b + s * 2, b + s * 2 + 1, b + s * 2 + 2, b + s * 2 + 1, b + s * 2 + 3, b + s * 2 + 2);
+        if (s < seg) idx.push(b + s * 2, b + s * 2 + 2, b + s * 2 + 1, b + s * 2 + 1, b + s * 2 + 2, b + s * 2 + 3); // wound to face up, so the pavers take sun and shadow
       }
     }
   }
   const pg = new THREE.BufferGeometry();
   pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); pg.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); pg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   pg.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => i % 3 === 1 ? 1 : 0), 3)); pg.setIndex(idx);
-  add(new THREE.Mesh(pg, std({ map: graniteFlamed, vertexColors: true, roughness: 0.75, side: THREE.DoubleSide })), { cast: false, parent: kryptos });
+  add(new THREE.Mesh(pg, std({ map: graniteFlamed, vertexColors: true, roughness: 0.75 })), { cast: false, parent: kryptos });
   const [x, z] = W(0, 0); colliders.circles.push({ x, z, r: POOL.r + 0.05 });
 }
 // ---------- Morse code ----------
