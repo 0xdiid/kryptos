@@ -315,6 +315,7 @@ const petrified = canvasTex(512, 1024, (g, w, h) => {
 // tiling ground textures; geometry UVs are world metres, so repeat = 1 / tile size
 const grassTex = canvasTex(512, 512, (g, w, h) => {
   g.fillStyle = '#566e34'; g.fillRect(0, 0, w, h);
+  blotches(g, w, h, 40, ['#4a6630', '#64803a', '#6f8442', '#48602c'], 30, 110, 0.35); // patchy turf
   speckle(g, w, h, 24000, ['#445a28', '#69823c', '#788f46', '#3a4c20', '#8a9552'], 0.5, 1.8, 0.3, 0.9);
 }, { repeat: [1 / 4, 1 / 4] });
 // plaza paving: flamed pinkish-grey granite. `graniteFlamed` is the bare stone, `paverTex` the 0.6 m square grid.
@@ -1152,8 +1153,8 @@ let plumes = null;
 
   // ornamental grass: one clump of arching blades, instanced
   const pos = [], col = [], idx = [], base = new THREE.Color(), tip = new THREE.Color(), cc = new THREE.Color();
-  for (let b = 0; b < 150; b++) {
-    const a = R() * Math.PI * 2, lean = 0.12 + R() * R() * 0.9, hgt = 0.6 + R() * 0.5, wd = 0.009, ca = Math.cos(a), sa = Math.sin(a), r0 = R() * 0.12;
+  for (let b = 0; b < 230; b++) {
+    const a = R() * Math.PI * 2, lean = 0.2 + R() * 1.1, hgt = 0.55 + R() * 0.5, wd = 0.008, ca = Math.cos(a), sa = Math.sin(a), r0 = R() * 0.12;
     base.set('#5d6a3a'); tip.set(R() < 0.5 ? '#b7b07a' : '#8f9a58');
     const v0 = pos.length / 3;
     for (let s = 0; s <= 4; s++) {
@@ -1170,7 +1171,12 @@ let plumes = null;
   const spots = [];
   const bed = (cx, cz, rx, rz, n) => { for (let i = 0; i < n; i++) { const a = R() * 6.3, r = Math.sqrt(R()); spots.push([cx + Math.cos(a) * r * rx, cz + Math.sin(a) * r * rz]); } };
   // the stones stand in open lawn; the grass beds lie well to either side, each with a bench at its edge (CIA photographs)
-  bed(-10.5, 2, 3.2, 6.5, 44); bed(10, -1, 2.8, 5.5, 34); bed(-9, 11.5, 4, 3.5, 26);
+  const BEDS = [[-10.5, 2, 3.2, 6.5, 150], [10, -1, 2.8, 5.5, 110], [-9, 11.5, 4, 3.5, 100]];
+  for (const [cx, cz, rx, rz, n] of BEDS) {
+    bed(cx, cz, rx, rz, n);
+    const floor = add(new THREE.Mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), std({ map: mulchTex, roughness: 1 })), { cast: false, parent: grp });
+    floor.scale.set(rx * 0.9, 1, rz * 0.9); floor.position.set(cx, 0.012, cz);
+  }
   const clumps = new THREE.InstancedMesh(clump, grassClumpMat, spots.length);
   plumes = new THREE.InstancedMesh(plumeGeo, plumeMat, spots.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
