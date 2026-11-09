@@ -830,12 +830,12 @@ const sandSide = std({ map: canvasTex(1024, 512, (g, w, h) => sandstone(g, w, h,
 const sandTop = std({ map: canvasTex(1024, 512, (g, w, h) => sandstone(g, w, h, false)), roughness: 0.95 });
 const sandstoneMats = [sandSide, sandSide, sandTop, sandSide, sandSide, sandSide];
 const quartzMat = std({ map: canvasTex(512, 512, (g, w, h) => {
-  g.fillStyle = '#b4bcae'; g.fillRect(0, 0, w, h);
-  blotches(g, w, h, 60, ['#98a898', '#d6d9cc', '#8c9c8e', '#aab4a2'], 20, 120, 0.5);
+  g.fillStyle = '#d9dcd6'; g.fillRect(0, 0, w, h);
+  blotches(g, w, h, 60, ['#c2cac6', '#eeefea', '#b4c0be', '#d0d4cc'], 20, 120, 0.5); // white quartz with a faint blue-green cast
   g.strokeStyle = 'rgba(120,140,128,0.5)';
   for (let i = 0; i < 40; i++) { g.lineWidth = 0.5 + R() * 2; g.beginPath(); let x = R() * w, y = R() * h; g.moveTo(x, y); for (let k = 0; k < 5; k++) { x += (R() - 0.5) * 160; y += (R() - 0.5) * 160; g.lineTo(x, y); } g.stroke(); }
   speckle(g, w, h, 5000, ['#ffffff', '#9aa89c', '#e6e2d6'], 0.4, 1.4, 0.2, 0.6);
-}), color: 0xe6e0d2, roughness: 0.95, flatShading: true });
+}), roughness: 0.95, flatShading: true });
 function boulder(sx, sy, sz, mat, seed) { // angular quarried block: a wedge with one long sloping face and knocked corners
   const g = new THREE.BoxGeometry(sx, sy, sz, 3, 2, 2), p = g.attributes.position, r = rnd(seed), seen = new Map();
   for (let i = 0; i < p.count; i++) {
